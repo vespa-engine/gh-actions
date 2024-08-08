@@ -1,0 +1,102 @@
+---
+name: Link Checker
+
+on:
+  workflow_call:
+    inputs:
+      ignore-urls:
+        description: |
+          List of Strings or RegExps to ignore URLs, one per line.
+          Ref "ignore_urls" in https://github.com/gjtorikian/html-proofer?tab=readme-ov-file#configuration
+        required: false
+        type: string
+        default: |-
+          /example.com.*/
+      ignore-files:
+        description: |
+          List of Strings or RegExps to ignore files, one per line.
+          Ref "ignore_files" in https://github.com/gjtorikian/html-proofer?tab=readme-ov-file#configuration
+        required: false
+        type: string
+        default: ""
+      swap-urls:
+        description: |
+          List of patterns to swap URLs. The pattern is in the form of "pattern:replacement".
+          Ref https://github.com/gjtorikian/html-proofer?tab=readme-ov-file#swapping-information
+        required: false
+        type: string
+        default: |-
+          (https\://github.com.*/master/.*)#.*:\1
+          (https\://github.com.*/main/.*)#.*:\1
+          (https\://github.com.*/blob/.*)#.*:\1
+      additional-args:
+        description: |
+          Additional arguments to pass to htmlproofer.
+
+          Example: "--ignore-missing-alt --ignore-status-codes '999,401,404'"
+        required: false
+        type: string
+        default: ""
+
+defaults:
+  run:
+    # Specify to ensure "pipefail and errexit" are set.
+    # Ref: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#defaultsrunshell
+    shell: bash
+
+jobs:
+  htmlproofer:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 3.1
+          bundler-cache: true
+
+      - name: Build site
+        run: |
+          bundle exec jekyll build
+
+      - name: Clean redirections
+        run: |
+          # Remove the redirect-files before link-check
+          find _site/ -name \*.html | \
+            xargs grep -l "Click here if you are not redirected." | xargs rm
+
+      - name: Clean code elements from html
+        run: |
+          # htmlproofer does not check links inside "<code>" and "<pre>" elements
+          find _site -name \*.html | xargs sed -i.orig 's/<code[^>]*>//g; s/<\/code>//g; s/<pre[^>]*>//g; s/<\/pre>//g;'
+          find _site -name \*.orig | xargs rm
+
+      - name: check links
+        env:
+          LANG: "C.UTF-8"
+        run: |
+          # Merge all lines in the inputs and join them with a comma.
+          IGNORE_URLS="$( echo "${{ inputs.ignore-urls }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
+          IGNORE_FILES="$( echo "${{ inputs.ignore-files }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
+          SWAP_URLS="$( echo "${{ inputs.swap-urls }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
+
+          if [[ "${{ runner.debug }}" == "1" ]]; then
+            echo "IGNORE_URLS: ${IGNORE_URLS}"
+            echo "IGNORE_FILES: ${IGNORE_FILES}"
+            echo "SWAP_URLS: ${SWAP_URLS}"
+          fi
+
+          bundle exec htmlproofer \
+            --assume-extension .html \
+            --no-enforce-https \
+            --no-check-external-hash \
+            --allow-missing-href \
+            --typhoeus '{"connecttimeout": 10, "timeout": 30, "accept_encoding": "zstd,br,gzip,deflate"}' \
+            --hydra '{"max_concurrency": 2}' \
+            --ignore-files "${IGNORE_FILES}" \
+            --ignore-urls "${IGNORE_URLS}" \
+            --swap-urls "${SWAP_URLS}" \
+            ${{ inputs.additional-args }} \
+            _site
