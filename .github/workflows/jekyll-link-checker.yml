@@ -94,7 +94,7 @@ jobs:
             --no-check-external-hash \
             --allow-missing-href \
             --typhoeus '{"connecttimeout": 10, "timeout": 30, "accept_encoding": "zstd,br,gzip,deflate"}' \
-            --hydra '{"max_concurrency": 2}' \
+            --hydra '{"max_concurrency": 1}' \
             --ignore-files "${IGNORE_FILES}" \
             --ignore-urls "${IGNORE_URLS}" \
             --swap-urls "${SWAP_URLS}" \
