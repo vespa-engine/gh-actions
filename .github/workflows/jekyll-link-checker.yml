@@ -64,8 +64,9 @@ jobs:
       - name: Clean redirections
         run: |
           # Remove the redirect-files before link-check
-          find _site/ -name \*.html | \
-            xargs grep -l "Click here if you are not redirected." | xargs rm
+          find _site/ -name \*.html -print0 | \
+            xargs -0 -n 100 --no-run-if-empty grep -l "Click here if you are not redirected." || true | \
+            xargs --no-run-if-empty rm
 
       - name: Clean code elements from html
         run: |
