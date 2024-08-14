@@ -1,0 +1,76 @@
+name: Verify Markdown Giudes
+#
+# This workflow allows you to run tests for the markdown guides in the repository.
+#
+# It expects the following:
+# - `test` directory in the repository root containing the test configuration file and the test script.
+# - `test/requirements.txt` file containing the Python dependencies required to run the tests.
+# - `test/test.py` script that runs the tests.
+#
+
+on:
+  workflow_call:
+    inputs:
+      test-config-path:
+        description: |
+          The path to the test configuration file, relative to the repository root.
+
+          ::warning:: This is mutually exclusive with `test-file`.
+
+          Example: `test/_test_config.yml`
+        type: string
+        required: false
+      test-file:
+        description: |
+          The path to the test file, relative to the repository root. This is used to run tests for a specific guide.
+
+          ::warning:: This is mutually exclusive with `test-config-path` and will take precedence over it.
+
+          Example: `billion-scale-vector-search/README.md`
+        type: string
+        required: false
+
+defaults:
+  run:
+    # Specify to ensure "pipefail and errexit" are set.
+    # Ref: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#defaultsrunshell
+    shell: bash
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      LANG: "C.UTF-8"
+    steps:
+      # Replace when this is merged: https://github.com/vespa-engine/gh-actions/pull/7
+      # - uses: vespa-engine/gh-actions/github/free-disk-space@main
+      - uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be
+        with:
+          tool-cache: "false"
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Install python dependencies
+        shell: bash
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -qqq -r test/requirements.txt --user
+          python3 -m pip install -qqq pytest nbmake --user
+
+      - name: Install Vespa CLI
+        uses: vespa-engine/setup-vespa-cli-action@v1
+
+      - name: run-tests (config)
+        if: ${{ inputs.test-config-path  && !inputs.test-file }}
+        run: |
+          ./test/test.py -w $GITHUB_WORKSPACE -c ${{ inputs.test-config-path }}
+
+      - name: run-tests (file)
+        if: ${{ inputs.test-file && !inputs.test-config-path }}
+        run: |
+          ./test/test.py -w $GITHUB_WORKSPACE ${{ inputs.test-file }}
