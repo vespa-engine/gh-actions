@@ -37,6 +37,26 @@ on:
         required: false
         type: string
         default: ""
+      build-plugins:
+        description: |
+          List of plugins to build before building the site, must be one per line.
+        required: false
+        type: string
+        default: ""
+      add-no-render-with-liquid:
+        description: |
+          Set to "true" to adds`render_with_liquid: false` to a set of files before building the site.
+
+          File types: *.md, *.java, *.sd, services.xml, hosts.xml, deployment.xml
+        required: false
+        type: string
+        default: "false"
+      pre-check-script:
+        description: |
+          Path to the script to run before checking the links.
+        required: false
+        type: string
+        default: ""
 
 defaults:
   run:
@@ -57,6 +77,24 @@ jobs:
           ruby-version: 3.1
           bundler-cache: true
 
+      - name: Do not render with liquid
+        if: ${{ inputs.add-no-render-with-liquid == 'true' }}
+        run: |
+          find . -not -path './_site/*' \( -name '*.md' -or -name '*.java' -or -name '*.sd' \) | \
+            while read f; do (echo -e "---\nrender_with_liquid: false\n---\n"; cat ${f})>${f}.new; mv ${f}.new ${f}; done
+          find . -not -path './_site/*' \( -name services.xml -or -name hosts.xml -or -name deployment.xml \) | \
+            while read f; do (echo -e "---\nrender_with_liquid: false\n---\n"; cat ${f})>${f}.new; mv ${f}.new ${f}; done
+
+      - name: Build Plugins
+        if: ${{ inputs.build-plugins }}
+        run: |
+          PLUGINS=(${{ inputs.build-plugins }})
+          for plg in "${PLUGINS[@]}";
+          do
+            echo "Building plugin: $plg"
+            bundle exec jekyll build -p "$plg"
+          done
+
       - name: Build site
         run: |
           bundle exec jekyll build
@@ -64,15 +102,19 @@ jobs:
       - name: Clean redirections
         run: |
           # Remove the redirect-files before link-check
-          find _site/ -name \*.html -print0 | \
+          find _site/ -name '*.html' -print0 | \
             xargs -0 -n 100 --no-run-if-empty grep -l "Click here if you are not redirected." || true | \
             xargs --no-run-if-empty rm
 
       - name: Clean code elements from html
         run: |
           # htmlproofer does not check links inside "<code>" and "<pre>" elements
-          find _site -name \*.html | xargs sed -i.orig 's/<code[^>]*>//g; s/<\/code>//g; s/<pre[^>]*>//g; s/<\/pre>//g;'
-          find _site -name \*.orig | xargs rm
+          find _site -name '*.html' | xargs sed -i'' 's/<code[^>]*>//g; s/<\/code>//g; s/<pre[^>]*>//g; s/<\/pre>//g;'
+
+      - name: Run pre-check script
+        if: ${{ inputs.pre-check-script }}
+        run: |
+          ${{ inputs.pre-check-script }}
 
       - name: check links
         env:
@@ -90,14 +132,13 @@ jobs:
           fi
 
           bundle exec htmlproofer \
-            --assume-extension .html \
-            --no-enforce-https \
-            --no-check-external-hash \
             --allow-missing-href \
-            --typhoeus '{"connecttimeout": 10, "timeout": 30, "accept_encoding": "zstd,br,gzip,deflate"}' \
             --hydra '{"max_concurrency": 1}' \
             --ignore-files "${IGNORE_FILES}" \
             --ignore-urls "${IGNORE_URLS}" \
+            --no-check-external-hash \
+            --no-enforce-https \
             --swap-urls "${SWAP_URLS}" \
+            --typhoeus '{"connecttimeout": 10, "timeout": 30, "accept_encoding": "zstd,br,gzip,deflate"}' \
             ${{ inputs.additional-args }} \
             _site
