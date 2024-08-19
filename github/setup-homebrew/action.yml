@@ -1,0 +1,46 @@
+name: Setup Homebrew
+description: Set up Homebrew environment
+author: dawidd6
+branding:
+  icon: settings
+  color: yellow
+inputs:
+  core:
+    description: Update the `homebrew/core` tap.
+    required: false
+    default: false
+  cask:
+    description: Update the `homebrew/cask` tap.
+    required: false
+    default: false
+  test-bot:
+    description: Install the `homebrew/test-bot` tap.
+    required: false
+    default: auto
+  debug:
+    description: Show debugging output
+    required: false
+    default: ${{ runner.debug == '1' }}
+  token:
+    description: Token to be used for GitHub authentication (if using private repositories). This token will persist through other steps for the duration of the job.
+    required: false
+    default: ""
+  brew-gh-api-token:
+    description: Token to be used for GitHub API operations within `brew`. This is confusingly not the same thing as `token` above.
+    required: false
+    default: "${{ github.token }}"
+  stable:
+    description: Use the latest stable `homebrew/brew` tag.
+    required: false
+    default: false
+outputs:
+  repository-path:
+    description: Path to where the repository has been checked out (if applicable)
+  gems-path:
+    description: Homebrew's Ruby gems path
+  gems-hash:
+    description: Homebrew's Ruby Gemfile.lock sha256sum
+runs:
+  using: node20
+  main: main.mjs
+  post: post.mjs
