@@ -1,0 +1,84 @@
+name: Docker
+
+# This workflow will generate container images for each of the Github Actions
+# which are using a Dockerfile.
+
+on:
+  push:
+    branches:
+      - 'main'
+      - 'feature-*'
+    tags:
+      - 'v*'
+
+jobs:
+  prepare:
+    # Finds all the Dockerfiles in the repository and sets the action names
+    # as output to reuse as matrix strategy in the build job
+    runs-on: ubuntu-latest
+
+    outputs:
+      matrix_json: ${{ steps.set-output.outputs.matrix_json }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Find Dockerfiles
+        id: set-output
+        run: |
+          # Find all Dockerfiles in the repository
+          paths_with_docker=$(find -type f -name 'Dockerfile' | sed 's|/Dockerfile||' | sed 's|./||')
+          # Transform the list of paths into a valid JSON array to be used as matrix strategy
+          action_names=$(echo $paths_with_docker | jq --raw-input --compact-output 'split(" ") | { "action-name": . }')
+
+          echo "Found Dockerfiles in the repository:"
+          echo "${action_names}"
+
+          echo "matrix_json=${action_names}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    runs-on: ubuntu-latest
+
+    needs:
+      - prepare
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        ${{ fromJson(needs.prepare.outputs.matrix_json) }}
+
+    env:
+      REGISTRY: ghcr.io
+      IMAGE_NAME: ${{ github.repository }}/${{ matrix.action-name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=pr
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.action-name }}
+          file: ${{ matrix.action-name }}/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}

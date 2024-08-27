@@ -1,0 +1,6 @@
+name: 'Build Jekyll for Vespa Search'
+description: 'A simple GH Action for producing Jekyll build artifacts compatible with Vespa JSON'
+author: 'Vespa.ai'
+runs:
+  using: 'docker'
+  image: 'docker://ghcr.io/vespa-engine/gh-actions/jekyll-build-json:latest'
