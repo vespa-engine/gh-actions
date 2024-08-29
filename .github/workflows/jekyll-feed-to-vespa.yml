@@ -1,0 +1,33 @@
+---
+name: (WIP) Feed Jekyll posts to Vespa
+
+on:
+  workflow_call:
+    inputs:
+      log_level:
+        description: 'Log level for Jekyll build.'
+        required: false
+        default: 'info'
+        type: string
+
+defaults:
+  run:
+    # Specify to ensure "pipefail and errexit" are set.
+    # Ref: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#defaultsrunshell
+    shell: bash
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build with Jekyll
+        uses: vespa-engine/gh-actions/jekyll-build-json@main
+        with:
+          log_level: ${{ github.event.inputs.log_level }}
+
+      - name: List JSON
+        run: |
+          find _site -type f -name '*.json'

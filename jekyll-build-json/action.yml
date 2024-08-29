@@ -1,0 +1,27 @@
+name: 'Build Jekyll for Vespa Search'
+description: 'A simple GH Action for producing Jekyll build artifacts compatible with Vespa JSON'
+author: 'Vespa.ai'
+inputs:
+  source:
+    description: 'Directory where the source files reside (relative to the workspace).'
+    required: false
+    default: ./
+  destination:
+    description: 'Output directory of the build. Although it can be nested inside the source, it cannot be the same as the source directory (relative to the workspace).'
+    required: false
+    default: ./_site
+  config:
+    description: 'Jekyll configuration file path relative to the workspace root.'
+    required: false
+    default: ./_config.yml
+  log_level:
+    description: 'Log level for Jekyll build.'
+    required: false
+    default: 'info'
+  token:
+    description: 'GitHub token'
+    required: true
+    default: ${{ github.token }}
+runs:
+  using: 'docker'
+  image: 'docker://ghcr.io/vespa-engine/gh-actions/jekyll-build-json'
