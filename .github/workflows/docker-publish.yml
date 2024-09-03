@@ -50,7 +50,6 @@ jobs:
     strategy:
       matrix:
         action-name: ${{fromJson(needs.prepare.outputs.container_names_json)}}
-        docker-platform: [linux/amd64, linux/arm64]
 
     env:
       REGISTRY: ghcr.io
@@ -90,8 +89,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          platforms: ${{ matrix.docker-platform }}
-          provenance: false # Bug: https://github.com/docker/build-push-action/issues/820
+          platforms: linux/amd64,linux/arm64
+          # Disable "provenance" vecause of this bug: https://github.com/docker/build-push-action/issues/820
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          

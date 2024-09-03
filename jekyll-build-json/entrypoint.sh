@@ -17,7 +17,7 @@ JEKYLL_ARGS=("-p" "/opt/jekyll/plugins")
 export JEKYLL_ENV="production"
 export JEKYLL_GITHUB_TOKEN="${INPUT_TOKEN}"
 export JEKYLL_BUILD_REVISION="${GITHUB_SHA}"
-export JEKYLL_LOG_LEVEL="${INPUT_LOG_LEVEL}"
+export JEKYLL_LOG_LEVEL="${INPUT_LOG_LEVEL:-info}"
 
 if [[ "${JEKYLL_LOG_LEVEL}" = "verbose" || "${JEKYLL_LOG_LEVEL}" = "debug" ]]; then
   JEKYLL_ARGS+=("-V")

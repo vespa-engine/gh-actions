@@ -6,14 +6,14 @@ require 'kramdown/parser/kramdown'
 
 module Jekyll
 
+    class JSONFile < Page; end
+
     class VespaIndexGenerator < Jekyll::Generator
         priority :lowest
         safe true
 
         def generate(site)
-          @site = site
-          puts "::debug::VespaIndexGenerator"
-            puts "site.config: #{(site.config).inspect}"
+            puts "::debug::VespaIndexGenerator"
 
             raise "Wrong parameter type, expected Jekyll::Site, got #{site.class}" unless site.is_a?(Jekyll::Site)
             raise "Search configuration not found" unless site.config.key?("search")
@@ -38,7 +38,7 @@ module Jekyll
                 url = page.url
                 url += 'index.html' if url[-1, 1] == '/'
 
-                text = extract_text(page)
+                text = extract_text(page.to_liquid)
                 outlinks = extract_links(page)
                 headers = extract_headers(page)
                 keywords = get_keywords(page)
@@ -61,14 +61,15 @@ module Jekyll
                 })
             end
             json = JSON.pretty_generate(operations)
-            # puts "::debug::Writing index file: #{namespace}_index.json"
-            # File.open(__dir__ + namespace + "_index.json", "w") { |f| f.write(json) }
+            json_dest = "json_indexes/"
+            full_path = "#{site.dest}/#{json_dest}"
+            FileUtils.mkdir_p(full_path) # Ensure the directory exists
 
-            puts "::debug::Writing index file: #{namespace}_index.json"
-            index_file = PageWithoutAFile.new(@site, __dir__, "", namespace + "_index.json")
-            index_file.content = json
-            index_file.data["layout"] = nil
-            index_file
+            fname = "#{namespace}_index.json"
+            puts "::debug::Writing JSON file for \"#{namespace}\" namespace to: #{full_path}#{fname}"
+            File.open("#{full_path}#{fname}", 'w') { |f| f.write(json) }
+
+            site.pages << Jekyll::JSONFile.new(site, site.dest, json_dest, fname)
         end
 
         def should_skip?(search_config, page)
