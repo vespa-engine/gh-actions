@@ -16,7 +16,7 @@ inputs:
     default: ./_config.yml
   log_level:
     description: 'Log level for Jekyll build.'
-    required: false
+    required: true
     default: 'info'
   token:
     description: 'GitHub token'
@@ -24,4 +24,4 @@ inputs:
     default: ${{ github.token }}
 runs:
   using: 'docker'
-  image: 'docker://ghcr.io/vespa-engine/gh-actions/jekyll-build-json'
+  image: 'docker://ghcr.io/vespa-engine/gh-actions/jekyll-build-json:pr-14'

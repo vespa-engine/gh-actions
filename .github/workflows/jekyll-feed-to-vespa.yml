@@ -9,6 +9,12 @@ on:
         required: false
         default: 'info'
         type: string
+      hook-post-build-script:
+        description: |
+          Script to run after Jekyll build, can be multi-line.
+          Ref: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#jobsjob_idstepsrun
+        required: false
+        type: string
 
 defaults:
   run:
@@ -17,17 +23,18 @@ defaults:
     shell: bash
 
 jobs:
-  lint:
+  build:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Build with Jekyll
-        uses: vespa-engine/gh-actions/jekyll-build-json@main
+        uses: vespa-engine/gh-actions/jekyll-build-json@fix-jekyll-build
         with:
-          log_level: ${{ github.event.inputs.log_level }}
+          log_level: ${{ inputs.log_level }}
 
-      - name: List JSON
+      - name: Hook - Post-build
+        if: ${{ inputs.hook-post-build-script != '' }}
         run: |
-          find _site -type f -name '*.json'
+          ${{ inputs.hook-post-build-script }}

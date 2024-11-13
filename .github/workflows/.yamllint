@@ -2,6 +2,8 @@
 extends: default
 
 rules:
+  document-start:
+    present: false
   line-length: disable
   truthy:
     check-keys: false
