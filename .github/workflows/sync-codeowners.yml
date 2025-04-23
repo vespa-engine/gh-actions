@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Collect OWNERS files and generate CODEOWNERS
         run: |
@@ -53,13 +55,12 @@ jobs:
 
       - name: Commit updated CODEOWNERS
         if: steps.check_diff.outputs.needs_update == 'true'
-        env:
-          # Select the branch to push to, for PRs the branch is "head_ref"
-          PUSH_REF: ${{ github.head_ref || github.ref }}
         run: |
           mv .github/CODEOWNERS.generated .github/CODEOWNERS
+
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add .github/CODEOWNERS
           git commit -m "Update CODEOWNERS file"
-          git push origin HEAD:${PUSH_REF}
+          git push
