@@ -121,7 +121,7 @@ jobs:
           LANG: "C.UTF-8"
         run: |
           # Merge all lines in the inputs and join them with a comma.
-          IGNORE_URLS="$( echo "/github.com/ ${{ inputs.ignore-urls }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
+          IGNORE_URLS="$( echo "/github.com/,${{ inputs.ignore-urls }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
           IGNORE_FILES="$( echo "${{ inputs.ignore-files }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
           SWAP_URLS="$( echo "${{ inputs.swap-urls }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
 
