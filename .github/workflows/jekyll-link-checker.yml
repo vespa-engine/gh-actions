@@ -116,12 +116,39 @@ jobs:
         run: |
           ${{ inputs.pre-check-script }}
 
-      - name: check links
+      - name: check links without github.com
         env:
           LANG: "C.UTF-8"
         run: |
           # Merge all lines in the inputs and join them with a comma.
-          IGNORE_URLS="$( echo "${{ inputs.ignore-urls }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
+          IGNORE_URLS="$( echo "/github.com/ ${{ inputs.ignore-urls }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
+          IGNORE_FILES="$( echo "${{ inputs.ignore-files }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
+          SWAP_URLS="$( echo "${{ inputs.swap-urls }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
+
+          if [[ "${{ runner.debug }}" == "1" ]]; then
+            echo "IGNORE_URLS: ${IGNORE_URLS}"
+            echo "IGNORE_FILES: ${IGNORE_FILES}"
+            echo "SWAP_URLS: ${SWAP_URLS}"
+          fi
+
+          bundle exec htmlproofer \
+            --allow-missing-href \
+            --hydra '{"max_concurrency": 1}' \
+            --ignore-files "${IGNORE_FILES}" \
+            --ignore-urls "${IGNORE_URLS}" \
+            --no-check-external-hash \
+            --no-enforce-https \
+            --swap-urls "${SWAP_URLS}" \
+            --typhoeus '{"connecttimeout": 10, "timeout": 30, "accept_encoding": "zstd,br,gzip,deflate"}' \
+            ${{ inputs.additional-args }} \
+            _site
+
+      - name: check links github.com only
+        env:
+          LANG: "C.UTF-8"
+        run: |
+          # Merge all lines in the inputs and join them with a comma.
+          IGNORE_URLS='/^(?!.*github\.com).*$/'
           IGNORE_FILES="$( echo "${{ inputs.ignore-files }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
           SWAP_URLS="$( echo "${{ inputs.swap-urls }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
 
