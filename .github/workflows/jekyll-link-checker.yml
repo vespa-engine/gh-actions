@@ -143,9 +143,16 @@ jobs:
             ${{ inputs.additional-args }} \
             _site
 
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.LINK_CHECKER_APP_ID }}
+          private-key: ${{ secrets.LINK_CHECKER_PRIVATE_KEY }}
+
       - name: check links github.com only
         env:
           LANG: "C.UTF-8"
+          REQ_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           # Merge all lines in the inputs and join them with a comma.
           IGNORE_URLS='/^(?!.*github\.com).*$/'
@@ -167,6 +174,6 @@ jobs:
             --no-check-external-hash \
             --no-enforce-https \
             --swap-urls "${SWAP_URLS}" \
-            --typhoeus '{"connecttimeout": 10, "timeout": 30, "accept_encoding": "zstd,br,gzip,deflate"}' \
+            --typhoeus '{"connecttimeout": 10, "timeout": 30, "accept_encoding": "zstd,br,gzip,deflate", "authorization": "Bearer ${{ env.REQ_TOKEN }}" }' \
             ${{ inputs.additional-args }} \
             _site
