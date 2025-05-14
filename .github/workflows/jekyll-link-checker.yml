@@ -57,6 +57,13 @@ on:
         required: false
         type: string
         default: ""
+    secrets:
+      github-app-id:
+        description: Github App ID with read access
+        required: true
+      github-app-priv-key:
+        description: Private Key for the Github App
+        required: true
 
 defaults:
   run:
@@ -146,8 +153,8 @@ jobs:
       - uses: actions/create-github-app-token@v2
         id: app-token
         with:
-          app-id: ${{ vars.LINK_CHECKER_APP_ID }}
-          private-key: ${{ secrets.LINK_CHECKER_PRIVATE_KEY }}
+          app-id: ${{ secrets.github-app-id }}
+          private-key: ${{ secrets.github-app-priv-key }}
 
       - name: check links github.com only
         env:
