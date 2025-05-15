@@ -155,6 +155,7 @@ jobs:
         with:
           app-id: ${{ secrets.github-app-id }}
           private-key: ${{ secrets.github-app-priv-key }}
+          owner: vespaai
 
       - name: check links github.com only
         env:
