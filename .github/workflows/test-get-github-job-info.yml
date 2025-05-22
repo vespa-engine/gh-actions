@@ -1,0 +1,72 @@
+name: "Test 'get-github-job-info' Action"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "get-github-job-info/*"
+      - ".github/workflows/test-get-github-job-info.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  test:
+    name: Test "get-github-job-info" Action
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get job run info
+        id: get-github-job-info
+        uses: ./get-github-job-info
+
+      - name: Verify job run info
+        run: |
+          set -x
+          job_id=${{ steps.get-github-job-info.outputs.job_id }}
+          echo "Job ID: $job_id"
+          if [[ ! "$job_id" =~ ^[0-9]+$ ]]; then echo "Invalid job ID: '$job_id'" && exit 1; fi
+
+          web_url=${{ steps.get-github-job-info.outputs.web_url }}
+          echo "Web URL: $web_url"
+          if [[ ! "$web_url" =~ ^https://github\.com/vespa-engine/gh-actions/actions/runs/[0-9]+/job/[0-9]+$ ]]; then
+            echo "Invalid web URL: '$web_url'" && exit 1
+          fi
+
+  test-matrix:
+    name: Test "get-github-job-info" Action with matrix
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        foo: ["bar", "baz"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get job run info
+        id: get-github-job-info
+        uses: ./get-github-job-info
+
+      - name: Verify job run info
+        run: |
+          set -x
+          job_id=${{ steps.get-github-job-info.outputs.job_id }}
+          echo "Job ID: $job_id"
+          if [[ ! "$job_id" =~ ^[0-9]+$ ]]; then echo "Invalid job ID: '$job_id'" && exit 1; fi
+
+          web_url=${{ steps.get-github-job-info.outputs.web_url }}
+          echo "Web URL: $web_url"
+          if [[ ! "$web_url" =~ ^https://github\.com/vespa-engine/gh-actions/actions/runs/[0-9]+/job/[0-9]+$ ]]; then
+            echo "Invalid web URL: '$web_url'" && exit 1
+          fi

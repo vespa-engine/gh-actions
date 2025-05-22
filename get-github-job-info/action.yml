@@ -1,0 +1,97 @@
+name: "Get info for the current job run."
+description: "Provide info about the current job run that is not easily available from the github environment."
+#
+# Copyright Vespa.ai. Licensed under the terms of the Apache 2.0 license. See LICENSE in the project root.
+#
+# This composite action provides information about the current job run. It uses the GitHub API to fetch
+# job details for the current workflow run and sets the numeric job ID and web URL as outputs for use
+# in subsequent steps. The action can handle both matrix jobs and non-matrix jobs by checking the job name
+# and matrix values.
+# Partly based on code snippets from: https://github.com/orgs/community/discussions/129314
+#
+
+outputs:
+  job_id:
+    value: ${{ steps.get-job-run-info.outputs.job_id }}
+    description: "The numeric job ID of the current job run."
+  web_url:
+    value: ${{ steps.get-job-run-info.outputs.web_url }}
+    description: "The web URL of the current job run."
+
+runs:
+  using: "composite"
+  steps:
+    - name: Get job run info
+      id: get-job-run-info
+      uses: actions/github-script@v7
+      env:
+        matrix: ${{ toJSON(matrix) }}
+      with:
+        script: |
+          // Get jobs for the current workflow run from the GitHub API
+          const { data: workflowRun } =
+            await github.rest.actions.listJobsForWorkflowRunAttempt({
+              attempt_number: process.env.GITHUB_RUN_ATTEMPT,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+
+          // 1. If matrix is used, find the job that includes the matrix values.
+          //    In this case, we do not check the job name.
+          let matrixValues = [];
+          if (process.env.matrix) {
+            try {
+              const parsedMatrix = JSON.parse(process.env.matrix);
+              if (typeof parsedMatrix === 'object' && parsedMatrix !== null) {
+                matrixValues = Object.values(parsedMatrix);
+                core.info(`Matrix values: ${matrixValues}`);
+              }
+            } catch (error) {
+              core.warning(`Warning: Could not parse process.env.matrix as JSON: ${error}`);
+              matrixValues = [];
+            }
+          }
+
+          const matrixJob = workflowRun.jobs.find((job) => {
+            if (matrixValues.length > 0) {
+              return job.name.includes(matrixValues.join(", "));
+            }
+          });
+
+          // 2. If matrix is not used, get the list of jobs from the github api and find the job
+          //    whose name (e.g. 'Promote to public' best matches the id (e.g. 'promote-release-to-public')
+          //    of the current job. Note that the id is not available from the github api, and the name
+          //    is not available from the context, so we have to do some string matching.
+          if (!matrixJob) {
+            let maxSim = -1;
+            let closestJob = null;
+
+            workflowRun.jobs.forEach((job) => {
+              const jobTokens = job.name.toLowerCase().split(/\W+/);
+              const contextTokens = context.job.toLowerCase().split(/\W+/);
+              const commonTokens = jobTokens.filter(token => contextTokens.includes(token)).length;
+              const uniqueTokens = new Set(jobTokens.concat(contextTokens)).size;
+              const similarity = commonTokens / uniqueTokens;
+              core.info(`Job name: ${job.name}`);
+              core.info(`Current job name: ${context.job}`);
+              core.info(`Similarity: ${similarity}`);
+              if (similarity > maxSim) {
+                maxSim = similarity;
+                closestJob = job;
+              }
+            });
+            foundJob = closestJob;
+            core.info(`Using closest job: ${foundJob.name}`);
+          } else {
+            foundJob = matrixJob;
+            core.info(`Using matrix job: ${matrixJob.name}`);
+          }
+
+          const { id: jobId, html_url: link } = foundJob;
+          core.info(`Github job run ID: ${jobId}`);
+          core.info(`Github job run link: ${link}`);
+
+          // Set the jobId and link as outputs
+          core.setOutput("job_id", jobId);
+          core.setOutput("web_url", link);
