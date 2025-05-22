@@ -17,7 +17,7 @@ jobs:
     steps:
       - name: Get github job run info
         id: get-github-job-info
-        uses: vespaai/actions/get-github-job-info@main
+        uses: vespa-engine/gh-actions/get-github-job-info@main
 
       - name: Print job run info
         run: |
