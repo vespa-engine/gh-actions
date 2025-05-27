@@ -143,6 +143,7 @@ jobs:
             echo "SWAP_URLS: ${SWAP_URLS}"
           fi
 
+          bundle list
           bundle exec htmlproofer \
             --allow-missing-href \
             --hydra '{"max_concurrency": 1}' \
@@ -178,6 +179,7 @@ jobs:
             echo "SWAP_URLS: ${SWAP_URLS}"
           fi
 
+          bundle list
           bundle exec htmlproofer \
             --allow-missing-href \
             --hydra '{"max_concurrency": 1}' \
