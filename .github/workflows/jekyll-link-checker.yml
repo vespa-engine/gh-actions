@@ -87,7 +87,6 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: 3.3
-          bundler-cache: true
 
       - name: Do not render with liquid
         if: ${{ inputs.add-no-render-with-liquid == 'true' }}
