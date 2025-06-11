@@ -189,6 +189,6 @@ jobs:
             --no-check-external-hash \
             --no-enforce-https \
             --swap-urls "${SWAP_URLS}" \
-            --typhoeus '{"connecttimeout": 10, "timeout": 30, "accept_encoding": "zstd,br,gzip,deflate", "authorization": "Bearer ${{ env.REQ_TOKEN }}" }' \
+            --typhoeus '{"connecttimeout": 10, "timeout": 30, "accept_encoding": "zstd,br,gzip,deflate", "headers": {"Authorization": "Bearer ${{ env.REQ_TOKEN }}" } }' \
             ${{ inputs.additional-args }} \
             _site
