@@ -78,11 +78,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Gemfiles for link checking
-        run: |
-          curl -o Gemfile https://raw.githubusercontent.com/vespa-engine/vespa/master/Gemfile
-          curl -o Gemfile.lock https://raw.githubusercontent.com/vespa-engine/vespa/master/Gemfile.lock
-
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
