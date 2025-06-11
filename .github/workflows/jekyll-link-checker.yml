@@ -91,6 +91,10 @@ jobs:
           find . -not -path './_site/*' \( -name services.xml -or -name hosts.xml -or -name deployment.xml \) | \
             while read f; do (echo -e "---\nrender_with_liquid: false\n---\n"; cat ${f})>${f}.new; mv ${f}.new ${f}; done
 
+      - name: bundle install
+        run: |
+          bundle install
+
       - name: Build Plugins
         if: ${{ inputs.build-plugins }}
         run: |
@@ -103,7 +107,6 @@ jobs:
 
       - name: Build site
         run: |
-          bundle install
           bundle exec jekyll build
 
       - name: Clean redirections
