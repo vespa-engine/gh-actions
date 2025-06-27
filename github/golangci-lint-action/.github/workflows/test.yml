@@ -1,0 +1,127 @@
+name: "build-and-test"
+on: # rebuild any PRs and main branch changes
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  build: # make sure build/ci work properly
+    runs-on: ubuntu-latest
+    steps:
+      - if: ${{ !(github.event_name == 'pull_request' && (github.event.pull_request.user.id == 49699333 || contains(github.event.pull_request.labels.*.name, 'dependencies'))) }}
+        uses: actions/checkout@v4
+      - if: github.event_name == 'pull_request' && (github.event.pull_request.user.id == 49699333 || contains(github.event.pull_request.labels.*.name, 'dependencies'))
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.ref }}
+
+      - run: |
+          npm install
+          npm run all
+
+      # Update dist files if there is label dependencies or pull request' author is dependabot[bot] (id = 49699333)
+      - name: Update dist files
+        if: github.event_name == 'pull_request' && (github.event.pull_request.user.id == 49699333 || contains(github.event.pull_request.labels.*.name, 'dependencies'))
+        run: |
+          if [[ -z $(git status -s) ]]
+          then
+            echo "No change is required"
+          else
+            echo "Updating dist directory"
+            git config --local user.name "dependabot[bot]"
+            git config --local user.email "49699333+dependabot[bot]@users.noreply.github.com"
+            git add --update
+            git commit --message="Update dist files"
+            git push
+          fi
+
+      # Fail the build if there is dirty change
+      - run: git diff --exit-code
+
+  test: # make sure the action works on a clean machine without building
+    needs: [ build ]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-22.04-arm
+          - macos-latest
+          - windows-latest
+        version:
+          - ""
+          - "latest"
+          - "v2.1"
+          - "v2.1.0"
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: oldstable
+      - uses: ./
+        with:
+          version: ${{ matrix.version }}
+          args: --timeout=5m --issues-exit-code=0 ./sample/...
+          only-new-issues: true
+
+  test-go-install: # make sure the action works on a clean machine without building (go-install mode)
+    needs: [ build ]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-22.04-arm
+          - macos-latest
+          - windows-latest
+        version:
+          - ""
+          - "latest"
+          - "v2.1.0"
+          - "f6c2e6c999dfae444d1fe7f1b0d49becdae44547"
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: oldstable
+      - uses: ./
+        with:
+          version: ${{ matrix.version }}
+          args: --timeout=5m --issues-exit-code=0 ./sample/...
+          only-new-issues: true
+          install-mode: goinstall
+
+  test-go-mod:
+    needs: [ build ]
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-22.04-arm
+          - macos-latest
+          - windows-latest
+        wd:
+          - sample-go-mod
+          - sample-go-tool
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: oldstable
+      - uses: ./
+        with:
+          working-directory: ${{ matrix.wd }}
+          args: --timeout=5m --issues-exit-code=0 ./...
