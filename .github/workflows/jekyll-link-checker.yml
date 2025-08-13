@@ -179,7 +179,6 @@ jobs:
           bundle exec htmlproofer \
             --allow-missing-href \
             --hydra '{"max_concurrency": 1}' \
-            --log-level debug \
             --ignore-files "${IGNORE_FILES}" \
             --ignore-urls "${IGNORE_URLS}" \
             --no-check-external-hash \
