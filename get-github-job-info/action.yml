@@ -23,7 +23,7 @@ runs:
   steps:
     - name: Get job run info
       id: get-job-run-info
-      uses: actions/github-script@v7
+      uses: actions/github-script@v8
       env:
         matrix: ${{ toJSON(matrix) }}
       with:
