@@ -166,7 +166,7 @@ jobs:
           REQ_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           # Merge all lines in the inputs and join them with a comma.
-          IGNORE_URLS='/^(?!.*github\.com).*$/'
+          IGNORE_URLS="${{ inputs.ignore-urls }},/^(?!.*github\.com).*$/"
           IGNORE_FILES="$( echo "${{ inputs.ignore-files }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
           SWAP_URLS="$( echo "${{ inputs.swap-urls }}" | awk '{gsub(/ /, "", $0); print}' ORS=',' )"
 
