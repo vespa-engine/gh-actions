@@ -1,0 +1,316 @@
+---
+name: Code Scan (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      scan-type:
+        description: |
+          Type of scan to perform.
+          Options:
+          - 'sast' (or 'code') for Static Application Security Testing (scanning source code)
+          - 'sca' (or 'dependencies') for Software Composition Analysis (scanning dependencies)
+          - 'image' for Container Image Scanning. Note: This REQUIRES the 'image-list' input to be set.
+        required: true
+        type: string
+
+      mend-app-name:
+        description: "Mend Application Name"
+        required: true
+        type: string
+
+      mend-project-name:
+        description: "Mend Project Name"
+        required: false
+        type: string
+
+      tags:
+        description: "Assign tags to scan and project (comma-separated key:value pairs)"
+        required: false
+        type: string
+
+      sast-source-path:
+        description: "Path to the source code to be scanned"
+        required: false
+        type: string
+        default: "."
+
+      sast-engines:
+        description: |
+          **Recommended:** Comma-separated list of SAST engine IDs (e.g., '101,108' for Java and JavaScript). Omit for auto-recognition.
+          Useful ones: Ruby(5), C/C++(12), Go(18), Java(101), Python(104), JavaScript(108)
+          [See documentation for complete list](https://docs.mend.io/platform/latest/configure-the-mend-cli-for-sast#ConfiguretheMendCLIforSAST-Mend-CLI-SAST-supported-languages-and-engine-IDsMendCLISAST-supportedlanguagesandengineIDs)
+        required: false
+        type: string
+
+      image-list:
+        description: |
+          List of container images to scan (one per line).
+          Required when scan-type is 'image'.
+          Example:
+            myregistry.io/app:latest
+            myregistry.io/api:v1.0
+        required: false
+        type: string
+
+    secrets:
+      MEND_EMAIL:
+        description: "Mend user email for authentication"
+        required: true
+      MEND_USER_KEY:
+        description: "Mend user API key for authentication"
+        required: true
+
+defaults:
+  run:
+    # Specify to ensure "pipefail and errexit" are set.
+    # Ref: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#defaultsrunshell
+    shell: bash
+
+env:
+  MEND_ORG: ${{ vars.MEND_ORGANIZATION }}
+  MEND_APP: ${{ inputs.mend-app-name }}
+  MEND_PROJ: ${{ inputs.mend-project-name }}  # optional
+  MEND_EMAIL: ${{ secrets.MEND_EMAIL }}
+  MEND_USER_KEY: ${{ secrets.MEND_USER_KEY }}
+  MEND_URL: https://saas-eu.mend.io
+
+jobs:
+  prepare-image-matrix:
+    if: ${{ inputs.scan-type == 'image' }}
+
+    runs-on: ubuntu-latest
+    outputs:
+      images: ${{ steps.parse.outputs.images }}
+
+    steps:
+      - name: Parse Image List
+        id: parse
+        run: |
+          images='${{ inputs.image-list }}'
+
+          if [ -z "$images" ]; then
+            echo "❌ Error: image-list input is required for image scanning"
+            exit 1
+          fi
+
+          # Convert newline-separated list to JSON array
+          # Remove comments (lines starting with #), empty lines, and whitespace
+          json_array=$(echo "$images" | sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' | jq -R -s -c 'split("\n") | map(select(length > 0))')
+
+          echo "images=$json_array" >> $GITHUB_OUTPUT
+          echo "📋 Images to scan: $json_array"
+
+  scan-sast:
+    if: ${{ contains(fromJSON('["sast", "code"]'), inputs.scan-type) }}
+
+    runs-on: ubuntu-latest
+
+    env:
+      # The following are used by the Mend CLI during SAST scans
+      MEND_SAST_TIMEOUT_TOTAL: "3600"
+      MEND_SAST_SCAN_RETRIES: "3"
+      MEND_SAST_TARGET_DIRECTORY: ${{ inputs.sast-source-path }}
+      MEND_SAST_ENGINES: ${{ inputs.sast-engines }}
+
+    steps:
+      - name: Install Mend CLI
+        run: |
+          if command -v mend &> /dev/null; then
+            echo "✅ Mend CLI already installed"
+            mend --version
+            exit 0
+          fi
+
+          ARCH=$(uname -m)
+          case $ARCH in
+            x86_64) ARCH="amd64" ;;
+            aarch64) ARCH="arm64" ;;
+          esac
+          CLI_URL="https://downloads.mend.io/cli/linux_${ARCH}/mend"
+          curl -fsSL "${CLI_URL}" -o /tmp/mend
+          sudo mv /tmp/mend /usr/local/bin/mend
+          sudo chmod +x /usr/local/bin/mend
+          echo "✅ Mend CLI installed"
+          mend --version
+
+      - name: Run Mend Code Scan
+        id: scan
+        run: |
+          mend_args=(
+            "--non-interactive"
+            "--num-cpu" "$(nproc)"
+            "--scope" "${MEND_ORG}//${MEND_APP}//${MEND_PROJ}"
+          )
+
+          if [ -n "${{ inputs.tags }}" ]; then
+            mend_args+=("--tags" "${{ inputs.tags }}")
+          fi
+
+          set +e
+          mend sast "${mend_args[@]}"
+          exit_code=$?
+          echo "mend-exit=$exit_code" >> $GITHUB_OUTPUT
+
+      - name: Process Scan Results
+        env:
+          SCAN_EXIT_CODE: ${{ steps.scan.outputs.mend-exit }}
+        run: |
+          # Generate GitHub Actions Job Summary
+          echo "## 🔍 Mend Code Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Organization:** ${MEND_ORG}" >> $GITHUB_STEP_SUMMARY
+          echo "**Application:** ${MEND_APP}" >> $GITHUB_STEP_SUMMARY
+          echo "**Project:** ${MEND_PROJ}" >> $GITHUB_STEP_SUMMARY
+          echo "**Source Path:** ${MEND_SAST_TARGET_DIRECTORY}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          case $SCAN_EXIT_CODE in
+            0)
+              echo "### ✅ Success" >> $GITHUB_STEP_SUMMARY
+              echo "Scan completed successfully with no policy violations." >> $GITHUB_STEP_SUMMARY
+              ;;
+            1)
+              echo "### ❌ Invalid Configuration" >> $GITHUB_STEP_SUMMARY
+              echo "An invalid configuration parameter was passed. Check for typos in the parameters." >> $GITHUB_STEP_SUMMARY
+              ;;
+            2)
+              echo "### ❌ Connection Error" >> $GITHUB_STEP_SUMMARY
+              echo "Unable to access the update or license details from the Mend server URL. Check internet connection." >> $GITHUB_STEP_SUMMARY
+              ;;
+            4)
+              echo "### ❌ Unsupported Language" >> $GITHUB_STEP_SUMMARY
+              echo "Unable to detect a supported language within the project based on the file extensions provided." >> $GITHUB_STEP_SUMMARY
+              ;;
+            7)
+              echo "### ❌ Permission Error" >> $GITHUB_STEP_SUMMARY
+              echo "Could not create a cache subdirectory. Check that the Mend CLI permissions include 'create'." >> $GITHUB_STEP_SUMMARY
+              ;;
+            9)
+              echo "### ⚠️ Policy Violation" >> $GITHUB_STEP_SUMMARY
+              echo "Results contain too many vulnerabilities, which contravenes the defined policy." >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "Please review the findings in the Mend platform." >> $GITHUB_STEP_SUMMARY
+              ;;
+            10)
+              echo "### ❌ Scanning Engine Failure" >> $GITHUB_STEP_SUMMARY
+              echo "A scanning engine stalled or failed." >> $GITHUB_STEP_SUMMARY
+              ;;
+            *)
+              echo "### ❌ Unknown Error" >> $GITHUB_STEP_SUMMARY
+              echo "Scan failed with exit code: ${SCAN_EXIT_CODE}" >> $GITHUB_STEP_SUMMARY
+              ;;
+          esac
+
+          exit $SCAN_EXIT_CODE
+
+
+  scan-image:
+    if: ${{ inputs.scan-type == 'image' }}
+
+    runs-on: ubuntu-latest
+
+    env:
+      MEND_IMAGE_SCAN_TIMEOUT_TOTAL: "3600"
+      MEND_IMAGE_SCAN_RETRIES: "3"
+
+    needs: [prepare-image-matrix]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ${{ fromJson(needs.prepare-image-matrix.outputs.images) }}
+
+    steps:
+      - name: Install Mend CLI
+        run: |
+          if command -v mend &> /dev/null; then
+            echo "✅ Mend CLI already installed"
+            mend --version
+            exit 0
+          fi
+
+          ARCH=$(uname -m)
+          case $ARCH in
+            x86_64) ARCH="amd64" ;;
+            aarch64) ARCH="arm64" ;;
+          esac
+
+          CLI_URL="https://downloads.mend.io/cli/linux_${ARCH}/mend"
+          curl -fsSL "${CLI_URL}" -o /tmp/mend
+          sudo mv /tmp/mend /usr/local/bin/mend
+          sudo chmod +x /usr/local/bin/mend
+          echo "✅ Mend CLI installed"
+          mend --version
+
+      - name: Define Mend Project Name
+        if: ${{ env.MEND_PROJ == '' }}
+        run: |
+          # Replace any forward slashes and colons in the image name with double underscores
+          MEND_PROJ=$(echo "${{ matrix.image }}" | sed 's/[\/:]/__/g')
+          echo "Normalized Mend Project Name: ${MEND_PROJ}"
+          echo "MEND_PROJ=${MEND_PROJ}" >> $GITHUB_ENV
+
+      - name: Run Mend Image Scan
+        id: scan
+        run: |
+          echo "🔍 Scanning image: ${{ matrix.image }}"
+
+          mend_args=(
+            "--non-interactive"
+            "--scope" "${MEND_ORG}//${MEND_APP}//${MEND_PROJ}"
+          )
+
+          if [ -n "${{ inputs.tags }}" ]; then
+            mend_args+=("--tags" "${{ inputs.tags }}")
+          fi
+
+          echo "Using Mend arguments:"
+          for arg in "${mend_args[@]}"; do
+            echo " - $arg"
+          done
+
+          set +e
+          mend image "${mend_args[@]}" "${{ matrix.image }}"
+          exit_code=$?
+          echo "mend-exit=$exit_code" >> $GITHUB_OUTPUT
+
+      - name: Process Scan Results
+        env:
+          SCAN_EXIT_CODE: ${{ steps.scan.outputs.mend-exit }}
+        run: |
+          # Generate GitHub Actions Job Summary
+          echo "## 🔍 Mend Image Scan Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** ${{ matrix.image }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Organization:** ${MEND_ORG}" >> $GITHUB_STEP_SUMMARY
+          echo "**Application:** ${MEND_APP}" >> $GITHUB_STEP_SUMMARY
+          echo "**Project:** ${MEND_PROJ}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          case $SCAN_EXIT_CODE in
+            0)
+              echo "### ✅ Success" >> $GITHUB_STEP_SUMMARY
+              echo "Image scan completed successfully with no policy violations." >> $GITHUB_STEP_SUMMARY
+              ;;
+            1)
+              echo "### ❌ Invalid Configuration" >> $GITHUB_STEP_SUMMARY
+              echo "An invalid configuration parameter was passed. Check for typos in the parameters." >> $GITHUB_STEP_SUMMARY
+              ;;
+            2)
+              echo "### ❌ Connection Error" >> $GITHUB_STEP_SUMMARY
+              echo "Unable to access the update or license details from the Mend server URL. Check internet connection." >> $GITHUB_STEP_SUMMARY
+              ;;
+            9)
+              echo "### ⚠️ Policy Violation" >> $GITHUB_STEP_SUMMARY
+              echo "Image scan results contain vulnerabilities that contravene the defined policy." >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "Please review the findings in the Mend platform." >> $GITHUB_STEP_SUMMARY
+              ;;
+            *)
+              echo "### ❌ Error" >> $GITHUB_STEP_SUMMARY
+              echo "Image scan failed with exit code: ${SCAN_EXIT_CODE}" >> $GITHUB_STEP_SUMMARY
+              ;;
+          esac
+
+          exit $SCAN_EXIT_CODE
