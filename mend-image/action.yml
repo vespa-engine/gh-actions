@@ -1,0 +1,147 @@
+name: Image Scan with Mend CLI
+description: Run Mend container image scanning on your images
+
+inputs:
+  image-name:
+    description: "Container image to scan (e.g., alpine:latest, myregistry.io/app:v1.0)"
+    required: true
+
+  mend-app-name:
+    description: "Mend Application Name"
+    required: true
+
+  mend-project-name:
+    description: "Mend Project Name"
+    required: true
+
+  mend-api-key:
+    description: "Mend API Key (pass from secrets)"
+    required: true
+
+  mend-user:
+    description: "Mend User Email (pass from secrets)"
+    required: true
+
+  mend-url:
+    description: "Mend Server URL"
+    required: false
+    default: "https://saas-eu.mend.io"
+
+  local-pull:
+    description: "Pull from local Docker only (true/false)"
+    required: false
+    default: "false"
+
+  fail-on-policy-violation:
+    description: "Fail build on policy violations (true/false)"
+    required: false
+    default: "true"
+
+  log-level:
+    description: "Log level (INFO, DEBUG, WARNING, ERROR)"
+    required: false
+    default: "INFO"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Mend CLI
+      shell: bash
+      env:
+        ARCH: ${{ contains(fromJson('["X86", "X64"]'), runner.arch) && 'amd64' || 'arm64' }}
+      run: |
+        CLI_URL="https://downloads.mend.io/cli/linux_${ARCH}/mend"
+        echo "📥 Downloading Mend CLI from ${CLI_URL}"
+        curl -fsSL "${CLI_URL}" -o /tmp/mend
+        sudo mv /tmp/mend /usr/local/bin/mend
+        sudo chmod +x /usr/local/bin/mend
+        mend version
+
+    - name: Run Mend Image Scan
+      shell: bash
+      id: scan
+      env:
+        # Authentication variables
+        MEND_USER_KEY: ${{ inputs.mend-api-key }}
+        MEND_EMAIL: ${{ inputs.mend-user }}
+        MEND_URL: ${{ inputs.mend-url }}
+
+        # Scope
+        MEND_APP: ${{ inputs.mend-app-name }}
+        MEND_PROJ: ${{ inputs.mend-project-name }}
+
+        MEND_LOG_LEVEL: ${{ inputs.log-level }}
+      run: |
+        echo "🐳 Starting Mend Image Scan..."
+        echo "Image: ${{ inputs.image-name }}"
+        echo "Application: ${MEND_APP}"
+        echo "Project: ${MEND_PROJ}"
+
+        mend_args=(
+          "--non-interactive"
+          "--scope" "${MEND_APP}//${MEND_PROJ}"
+        )
+
+        # Add local-pull flag if enabled
+        if [[ "${{ inputs.local-pull }}" == "true" ]]; then
+          mend_args+=("--local-pull")
+        fi
+
+        # Add fail-policy flag if enabled
+        if [[ "${{ inputs.fail-on-policy-violation }}" == "true" ]]; then
+          mend_args+=("--fail-policy")
+        fi
+
+        set +e
+        mend image "${{ inputs.image-name }}" "${mend_args[@]}"
+        exit_code=$?
+
+        # Save exit code for next step
+        echo "app-name=${MEND_APP}" >> $GITHUB_OUTPUT
+        echo "proj-name=${MEND_PROJ}" >> $GITHUB_OUTPUT
+        echo "mend-exit=$exit_code" >> $GITHUB_OUTPUT
+        echo "cli-args=${mend_args[*]}" >> $GITHUB_OUTPUT
+
+    - name: Process Scan Results
+      shell: bash
+      env:
+        MEND_APP: "${{ steps.scan.outputs.app-name }}"
+        MEND_PROJ: "${{ steps.scan.outputs.proj-name }}"
+        CLI_ARGS: "${{ steps.scan.outputs.cli-args }}"
+        SCAN_EXIT_CODE: "${{ steps.scan.outputs.mend-exit }}"
+      run: |
+        printf '## 🐳 Image Scan for %s//%s\n' "${MEND_APP}" "${MEND_PROJ}" >> $GITHUB_STEP_SUMMARY
+        printf '\n\n' >> $GITHUB_STEP_SUMMARY
+        printf '**Image URI:** `%s`\n' "${{ inputs.image-name }}" >> $GITHUB_STEP_SUMMARY
+        printf '**Application:** %s\n' "${MEND_APP}" >> $GITHUB_STEP_SUMMARY
+        printf '**Project:** %s\n' "${MEND_PROJ}" >> $GITHUB_STEP_SUMMARY
+        printf '\n\n' >> $GITHUB_STEP_SUMMARY
+
+        case $SCAN_EXIT_CODE in
+          0)
+            echo "### ✅ Success" >> $GITHUB_STEP_SUMMARY
+            echo "Image scan completed successfully with no policy violations." >> $GITHUB_STEP_SUMMARY
+            ;;
+          1)
+            echo "### ❌ Invalid Configuration" >> $GITHUB_STEP_SUMMARY
+            echo "An invalid configuration parameter was passed. Check for typos in the parameters." >> $GITHUB_STEP_SUMMARY
+            ;;
+          2)
+            echo "### ❌ Connection Error" >> $GITHUB_STEP_SUMMARY
+            echo "Unable to access the update or license details from the Mend server URL. Check internet connection." >> $GITHUB_STEP_SUMMARY
+            ;;
+          9)
+            echo "### ⚠️ Policy Violation" >> $GITHUB_STEP_SUMMARY
+            echo "Image scan results contain vulnerabilities that contravene the defined policy." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please review the findings in the Mend platform." >> $GITHUB_STEP_SUMMARY
+            ;;
+          *)
+            echo "### ❌ Error" >> $GITHUB_STEP_SUMMARY
+            echo "Image scan failed with exit code: ${SCAN_EXIT_CODE}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Check the Mend CLI documentation for exit code details." >> $GITHUB_STEP_SUMMARY
+            ;;
+        esac
+
+        exit $SCAN_EXIT_CODE
