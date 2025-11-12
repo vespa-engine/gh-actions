@@ -46,7 +46,7 @@ inputs:
   incremental-scan:
     description: "Enable incremental scan (true/false)"
     required: false
-    default: ${{ github.event_name == 'pull_request' }}
+    default: "false"
 
   github-upload:
     description: "Upload results to GitHub Code Scanning Alerts (true/false)"
@@ -145,7 +145,7 @@ runs:
 
     - name: Upload SARIF Report
       if: ${{ inputs.github-upload == 'true' && steps.scan.outputs.mend-exit != '' }}
-      uses: github/codeql-action/upload-sarif@v4
+      uses: github/codeql-action/upload-sarif@0499de31b99561a6d14a36a5f662c2a54f91beee #v4.31.2
       with:
         sarif_file: 'mend.sarif'
         category: 'Mend SAST'
