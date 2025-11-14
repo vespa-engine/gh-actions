@@ -1,0 +1,139 @@
+name: Dependency Scan with Mend CLI
+description: Run Mend SCA dependency scanning on your codebase
+
+inputs:
+  mend-app-name:
+    description: "Mend Application Name"
+    required: true
+
+  mend-project-name:
+    description: "Mend Project Name"
+    required: true
+
+  mend-api-key:
+    description: "Mend API Key (pass from secrets)"
+    required: true
+
+  mend-user:
+    description: "Mend User Email (pass from secrets)"
+    required: true
+
+  target-directory:
+    description: "Target directory to scan"
+    required: false
+    default: ""
+
+  update:
+    description: "Update inventory in Mend Platform (true/false)"
+    required: false
+    default: "true"
+
+  reachability:
+    description: "Enable reachability analysis (true/false)"
+    required: false
+    default: "false"
+
+  log-level:
+    description: "Log level (INFO, DEBUG, WARNING, ERROR)"
+    required: false
+    default: "INFO"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Mend CLI
+      shell: bash
+      env:
+        ARCH: ${{ contains(fromJson('["X86", "X64"]'), runner.arch) && 'amd64' || 'arm64' }}
+      run: |
+        CLI_URL="https://downloads.mend.io/cli/linux_${ARCH}/mend"
+        echo "📥 Downloading Mend CLI from ${CLI_URL}"
+        curl -fsSL "${CLI_URL}" -o /tmp/mend
+        sudo mv /tmp/mend /usr/local/bin/mend
+        sudo chmod +x /usr/local/bin/mend
+        mend version
+
+    - name: Run Mend SCA Scan
+      shell: bash
+      id: scan
+      env:
+        # Authentication variables
+        MEND_USER_KEY: ${{ inputs.mend-api-key }}
+        MEND_EMAIL: ${{ inputs.mend-user }}
+        MEND_URL: https://saas-eu.mend.io
+
+        # Scope
+        MEND_APP: ${{ inputs.mend-app-name }}
+        MEND_PROJ: ${{ inputs.mend-project-name }}
+
+        MEND_LOG_LEVEL: ${{ inputs.log-level }}
+      run: |
+        echo "📦 Starting Mend SCA Scan..."
+        echo "Application: ${{ inputs.mend-app-name }}"
+        echo "Project: ${{ inputs.mend-project-name }}"
+        echo "Target Directory: ${{ github.workspace }}/${{ inputs.target-directory }}"
+
+        mend_args=(
+          "--non-interactive"
+          "--dir" "${{ github.workspace }}/${{ inputs.target-directory }}"
+          # Mend Organization in scope is assumed from API key
+          "--scope" "${MEND_APP}//${MEND_PROJ}"
+        )
+
+        # Ensure we only update if specified
+        if [[ "${{ inputs.update }}" == "true" ]]; then
+          mend_args+=("--update")
+        fi
+
+        # Add reachability flag if enabled
+        if [[ "${{ inputs.reachability }}" == "true" ]]; then
+          mend_args+=("--reachability")
+        fi
+
+        set +e
+        mend dep "${mend_args[@]}"
+        exit_code=$?
+
+        # Save exit code for next step
+        echo "app-name=${MEND_APP}" >> $GITHUB_OUTPUT
+        echo "proj-name=${MEND_PROJ}" >> $GITHUB_OUTPUT
+        echo "mend-exit=$exit_code" >> $GITHUB_OUTPUT
+        echo "cli-args=${mend_args[*]}" >> $GITHUB_OUTPUT
+
+    - name: Process Scan Results
+      shell: bash
+      env:
+        MEND_APP: "${{ steps.scan.outputs.app-name }}"
+        MEND_PROJ: "${{ steps.scan.outputs.proj-name }}"
+        CLI_ARGS: "${{ steps.scan.outputs.cli-args }}"
+        SCAN_EXIT_CODE: "${{ steps.scan.outputs.mend-exit }}"
+      run: |
+        printf "## 🔍 SCA (deps) Scan for %s//%s\n" "${MEND_APP}" "${MEND_PROJ}" >> $GITHUB_STEP_SUMMARY
+        printf '\n\n' >> $GITHUB_STEP_SUMMARY
+        printf '**Run Arguments:** `%s`\n' "${CLI_ARGS}" >> $GITHUB_STEP_SUMMARY
+        printf '\n\n' >> $GITHUB_STEP_SUMMARY
+
+        case $SCAN_EXIT_CODE in
+          0)
+            echo "### ✅ Success" >> $GITHUB_STEP_SUMMARY
+            echo "Scan completed successfully with no policy violations." >> $GITHUB_STEP_SUMMARY
+            ;;
+          9)
+            echo "### ⚠️ Policy Violation" >> $GITHUB_STEP_SUMMARY
+            echo "Vulnerabilities detected that violate your organization's policy." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please review the findings in the Mend platform." >> $GITHUB_STEP_SUMMARY
+            ;;
+          255)
+            echo "### ❌ General Error" >> $GITHUB_STEP_SUMMARY
+            echo "An error occurred during the scan." >> $GITHUB_STEP_SUMMARY
+            ;;
+          *)
+            echo "### ❌ Error" >> $GITHUB_STEP_SUMMARY
+            echo "Scan failed with exit code: ${SCAN_EXIT_CODE}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Check the Mend CLI documentation for exit code details." >> $GITHUB_STEP_SUMMARY
+            ;;
+        esac
+
+        exit $SCAN_EXIT_CODE
