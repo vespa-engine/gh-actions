@@ -75,6 +75,7 @@ runs:
 
         mend_args=(
           "--non-interactive"
+          "--dev"
           "--dir" "${{ github.workspace }}/${{ inputs.target-directory }}"
           # Mend Organization in scope is assumed from API key
           "--scope" "${MEND_APP}//${MEND_PROJ}"
