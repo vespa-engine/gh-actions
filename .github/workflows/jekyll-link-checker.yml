@@ -95,6 +95,9 @@ jobs:
         run: |
           bundle install
 
+      - name: Install libvips
+        run: sudo apt-get update && sudo apt-get install -y libvips-dev
+
       - name: Build Plugins
         if: ${{ inputs.build-plugins }}
         run: |
