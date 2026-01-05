@@ -51,7 +51,7 @@ inputs:
   github-upload:
     description: "Upload results to GitHub Code Scanning Alerts (true/false)"
     required: false
-    default: "true"
+    default: "false"
 
   enabled-engines:
     description: |
