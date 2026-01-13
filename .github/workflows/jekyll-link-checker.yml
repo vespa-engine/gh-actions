@@ -81,7 +81,7 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.3
+          ruby-version: 4.0.1
 
       - name: Do not render with liquid
         if: ${{ inputs.add-no-render-with-liquid == 'true' }}
