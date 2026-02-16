@@ -116,15 +116,11 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
       - name: Create GitHub Release (gh)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.tag-release.outputs.tag }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           echo "Creating release for $TAG"
