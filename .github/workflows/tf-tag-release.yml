@@ -1,4 +1,20 @@
 name: "TF: Tag release from main.tf template_version"
+#
+# Reads template_version from main.tf, creates a git tag and GitHub release
+# if the version is newer than the latest existing tag.
+#
+# Usage:
+#   on:
+#     push:
+#       branches: [main]
+#   concurrency:
+#     group: ${{ github.workflow }}-${{ github.ref_name }}
+#     cancel-in-progress: false
+#   jobs:
+#     tag-release:
+#       uses: vespa-engine/gh-actions/.github/workflows/tf-tag-release.yml@main
+#       secrets: inherit
+#
 
 on:
   workflow_call:

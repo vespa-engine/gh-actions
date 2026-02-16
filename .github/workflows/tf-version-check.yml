@@ -1,4 +1,18 @@
 name: "TF: PR Template version bump check"
+#
+# Enforces that template_version in main.tf is bumped (or not) depending on
+# whether the PR is labeled minor/no-tag. Compares against origin/main and
+# the latest semver tag.
+#
+# Usage:
+#   on:
+#     pull_request:
+#       types: [opened, synchronize, reopened, labeled, unlabeled]
+#       branches: [main]
+#   jobs:
+#     version-check:
+#       uses: vespa-engine/gh-actions/.github/workflows/tf-version-check.yml@main
+#
 
 on:
   workflow_call:
