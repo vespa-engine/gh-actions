@@ -55,6 +55,7 @@ jobs:
 
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             echo "Tag $TAG already exists; nothing to do."
+            echo "ℹ️ Tag $TAG already exists — skipping" >> "$GITHUB_STEP_SUMMARY"
             echo "create=no" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -67,6 +68,7 @@ jobs:
             HIGHEST=$(printf '%s\n%s\n' "$LATEST_TAG" "$VER" | sort -V | tail -n1)
             if [ "$HIGHEST" != "$VER" ]; then
               echo "template_version ($VER) is not greater than the latest tag ($LATEST_TAG); skipping tag creation." >&2
+              echo "ℹ️ Version $VER not greater than latest tag ($LATEST_TAG) — skipping" >> "$GITHUB_STEP_SUMMARY"
               echo "create=no" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -84,6 +86,7 @@ jobs:
           git tag -a "$TAG" -m "Release $TAG"
           git push origin "$TAG"
           echo "🏷 Created and pushed tag $TAG"
+          echo "🏷 Created and pushed tag **$TAG**" >> "$GITHUB_STEP_SUMMARY"
 
 
   publish-release:
@@ -110,9 +113,11 @@ jobs:
           echo "Creating release for $TAG"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists; nothing to do."
+            echo "ℹ️ Release $TAG already exists" >> "$GITHUB_STEP_SUMMARY"
           else
             gh release create "$TAG" \
               --title "Release $TAG" \
               --generate-notes
             echo "✅ Created release $TAG"
+            echo "✅ Created release **$TAG**" >> "$GITHUB_STEP_SUMMARY"
           fi

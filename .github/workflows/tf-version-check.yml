@@ -87,9 +87,11 @@ jobs:
           echo "Ensuring PR does NOT bump version: PR=$PR_VER, main=$MAIN_VER"
           if [ "$PR_VER" != "$MAIN_VER" ]; then
             echo "❌ locals.template_version changed in a minor/no-tag PR (PR=$PR_VER vs main=$MAIN_VER)." >&2
+            echo "❌ Version changed in minor/no-tag PR ($PR_VER vs $MAIN_VER)" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
           echo "✅ Version unchanged as expected for minor/no-tag PRs."
+          echo "✅ Version unchanged as expected ($PR_VER)" >> "$GITHUB_STEP_SUMMARY"
 
       # Enforce bumped for regular PRs
       - name: Enforce bump vs origin/main (regular PRs)
@@ -102,16 +104,18 @@ jobs:
 
           if [ "$PR_VER" = "$MAIN_VER" ]; then
             echo "❌ locals.template_version ($PR_VER) has not been bumped relative to main ($MAIN_VER)." >&2
+            echo "❌ Version not bumped vs main ($PR_VER = $MAIN_VER)" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
           HIGHEST=$(printf '%s\n%s\n' "$MAIN_VER" "$PR_VER" | sort -V | tail -n1)
           if [ "$HIGHEST" != "$PR_VER" ]; then
             echo "❌ locals.template_version ($PR_VER) is lower than main's version ($MAIN_VER)." >&2
+            echo "❌ Version $PR_VER is lower than main ($MAIN_VER)" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
-          echo "OK: PR version is greater than main."
+          echo "✅ PR version ($PR_VER) is greater than main ($MAIN_VER)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Enforce bump vs latest tag (regular PRs)
         if: steps.pr_intent.outputs.minor_or_notag != 'true'
@@ -123,18 +127,21 @@ jobs:
 
           if [ -z "$LATEST_TAG" ]; then
             echo "No tags found; skipping tag comparison."
+            echo "ℹ️ No existing tags — skipping tag comparison" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
           if [ "$PR_VER" = "$LATEST_TAG" ]; then
             echo "❌ locals.template_version ($PR_VER) has not been bumped relative to the latest tag ($LATEST_TAG)." >&2
+            echo "❌ Version not bumped vs latest tag ($PR_VER = $LATEST_TAG)" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
           HIGHEST=$(printf '%s\n%s\n' "$LATEST_TAG" "$PR_VER" | sort -V | tail -n1)
           if [ "$HIGHEST" != "$PR_VER" ]; then
             echo "❌ locals.template_version ($PR_VER) is lower than the latest tag ($LATEST_TAG)." >&2
+            echo "❌ Version $PR_VER is lower than latest tag ($LATEST_TAG)" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
 
-          echo "✅ PR version is greater than the latest tag."
+          echo "✅ PR version ($PR_VER) is greater than latest tag ($LATEST_TAG)" >> "$GITHUB_STEP_SUMMARY"
