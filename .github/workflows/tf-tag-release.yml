@@ -10,10 +10,12 @@ name: "TF: Tag release from main.tf template_version"
 #   concurrency:
 #     group: ${{ github.workflow }}-${{ github.ref_name }}
 #     cancel-in-progress: false
+#   permissions:
+#     contents: write
 #   jobs:
 #     tag-release:
 #       uses: vespa-engine/gh-actions/.github/workflows/tf-tag-release.yml@main
-#       secrets: inherit
+#       secrets: inherit  # needed for secrets.GITHUB_TOKEN used by gh release create
 #
 
 on:
@@ -106,6 +108,9 @@ jobs:
           echo "🏷 Created and pushed tag **$TAG**" >> "$GITHUB_STEP_SUMMARY"
 
 
+  # Separate job for failure isolation: if the GitHub Release API call fails,
+  # the tag is already pushed and won't be re-created on the next run
+  # (the "tag already exists" check makes tagging idempotent).
   publish-release:
     name: Publish Release
     runs-on: ubuntu-latest
