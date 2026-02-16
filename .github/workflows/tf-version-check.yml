@@ -80,9 +80,10 @@ jobs:
       # Enforce NOT bumped for minor/no-tag PRs
       - name: Enforce NOT bumped (minor/no-tag PRs)
         if: steps.pr_intent.outputs.minor_or_notag == 'true'
+        env:
+          PR_VER: ${{ steps.pr_version.outputs.value }}
+          MAIN_VER: ${{ steps.main_version.outputs.value }}
         run: |
-          PR_VER='${{ steps.pr_version.outputs.value }}'
-          MAIN_VER='${{ steps.main_version.outputs.value }}'
           echo "Ensuring PR does NOT bump version: PR=$PR_VER, main=$MAIN_VER"
           if [ "$PR_VER" != "$MAIN_VER" ]; then
             echo "❌ locals.template_version changed in a minor/no-tag PR (PR=$PR_VER vs main=$MAIN_VER)." >&2
@@ -93,9 +94,10 @@ jobs:
       # Enforce bumped for regular PRs
       - name: Enforce bump vs origin/main (regular PRs)
         if: steps.pr_intent.outputs.minor_or_notag != 'true'
+        env:
+          PR_VER: ${{ steps.pr_version.outputs.value }}
+          MAIN_VER: ${{ steps.main_version.outputs.value }}
         run: |
-          PR_VER='${{ steps.pr_version.outputs.value }}'
-          MAIN_VER='${{ steps.main_version.outputs.value }}'
           echo "Comparing PR ($PR_VER) vs main ($MAIN_VER)"
 
           if [ "$PR_VER" = "$MAIN_VER" ]; then
@@ -113,9 +115,10 @@ jobs:
 
       - name: Enforce bump vs latest tag (regular PRs)
         if: steps.pr_intent.outputs.minor_or_notag != 'true'
+        env:
+          PR_VER: ${{ steps.pr_version.outputs.value }}
+          LATEST_TAG: ${{ steps.latest_tag.outputs.value }}
         run: |
-          PR_VER='${{ steps.pr_version.outputs.value }}'
-          LATEST_TAG='${{ steps.latest_tag.outputs.value }}'
           echo "Comparing PR ($PR_VER) vs latest tag (${LATEST_TAG:-none})"
 
           if [ -z "$LATEST_TAG" ]; then
