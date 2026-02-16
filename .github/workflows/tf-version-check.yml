@@ -25,7 +25,8 @@ defaults:
 
 jobs:
   check-template-version-bumped:
-    name: Ensure locals.template_version is bumped vs main and latest tag
+    # Ensures template_version in main.tf is bumped vs main and latest tag (or unchanged for minor/no-tag PRs)
+    name: Check version bump
     runs-on: ubuntu-latest
 
     steps:

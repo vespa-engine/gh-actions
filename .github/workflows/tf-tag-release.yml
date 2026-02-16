@@ -27,7 +27,8 @@ defaults:
 
 jobs:
   tag-release:
-    name: Create release tag v<template_version>
+    # Creates a vX.Y.Z tag from template_version in main.tf if it's newer than the latest existing tag
+    name: Create release tag
     runs-on: ubuntu-latest
 
     permissions:
