@@ -93,7 +93,7 @@ jobs:
           echo "Latest tag (no v): ${LATEST_TAG:-none}"
           echo "value=$LATEST_TAG" >> "$GITHUB_OUTPUT"
 
-      # Enforce NOT bumped for minor/no-tag PRs
+      # When the PR is labeled as "minor" or "no-tag": Verifies that the version in the PR matches the version in main
       - name: Enforce NOT bumped (minor/no-tag PRs)
         if: steps.pr_intent.outputs.minor_or_notag == 'true'
         env:
@@ -109,7 +109,7 @@ jobs:
           echo "✅ Version unchanged as expected for minor/no-tag PRs."
           echo "✅ Version unchanged as expected ($PR_VER)" >> "$GITHUB_STEP_SUMMARY"
 
-      # Enforce bumped for regular PRs
+      # When the PR is NOT labeled as "minor" or "no-tag": Verifies that the version in the PR is greater than the version in main
       - name: Enforce bump vs origin/main (regular PRs)
         if: steps.pr_intent.outputs.minor_or_notag != 'true'
         env:
