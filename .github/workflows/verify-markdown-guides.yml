@@ -29,6 +29,12 @@ on:
           Example: `billion-scale-vector-search/README.md`
         type: string
         required: false
+      verbose:
+        description: |
+          Run the test script with the verbose option
+        type: boolean
+        default: false
+        required: false
 
 defaults:
   run:
@@ -41,6 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       LANG: "C.UTF-8"
+      VERBOSITY: ${{ inputs.verbose && ' -v' || ' ' }}
     steps:
       # Replace when this is merged: https://github.com/vespa-engine/gh-actions/pull/7
       # - uses: vespa-engine/gh-actions/github/free-disk-space@main
@@ -68,9 +75,9 @@ jobs:
       - name: run-tests (config)
         if: ${{ inputs.test-config-path  && !inputs.test-file }}
         run: |
-          ./test/test.py -w $GITHUB_WORKSPACE -c ${{ inputs.test-config-path }}
+          ./test/test.py -w $GITHUB_WORKSPACE -c ${{ inputs.test-config-path }} $VERBOSITY
 
       - name: run-tests (file)
         if: ${{ inputs.test-file && !inputs.test-config-path }}
         run: |
-          ./test/test.py -w $GITHUB_WORKSPACE ${{ inputs.test-file }}
+          ./test/test.py -w $GITHUB_WORKSPACE ${{ inputs.test-file }} $VERBOSITY
