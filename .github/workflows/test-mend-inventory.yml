@@ -1,0 +1,48 @@
+name: "Test 'mend-inventory' Action"
+
+on:
+  workflow_dispatch:
+    inputs:
+      mend-project-uuid:
+        description: "Mend Project UUID (from the Mend UI URL: ?project=<uuid>)"
+        required: true
+        default: "382cea30-cac2-457c-b074-c92aa5410e06"
+      mend-project-name:
+        description: "Display name (logs only)"
+        required: false
+        default: "console"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "mend-inventory/**"
+      - ".github/workflows/test-mend-inventory.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test 'mend-inventory' Action
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Fetch Mend inventory
+        uses: ./mend-inventory
+        with:
+          mend-project-uuid: ${{ inputs.mend-project-uuid || '382cea30-cac2-457c-b074-c92aa5410e06' }}
+          mend-project-name: ${{ inputs.mend-project-name || 'console' }}
+          mend-api-key: ${{ secrets.MEND_USER_KEY }}
+          mend-user: ${{ secrets.MEND_EMAIL }}
+          output-path: mend-inventory.json
+
+      - name: Upload inventory artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: mend-inventory
+          path: mend-inventory.json
+          retention-days: 14
+          if-no-files-found: warn
