@@ -44,7 +44,7 @@ runs:
         echo "  Output:  ${OUTPUT}"
 
         if [[ -z "${MEND_USER_KEY:-}" || -z "${MEND_EMAIL:-}" ]]; then
-          echo "::error::mend-api-key or mend-user is empty — confirm MEND_USER_KEY and MEND_EMAIL secrets are set on the calling repository."
+          echo "::error::Action inputs 'mend-api-key' and/or 'mend-user' are empty. Check that the calling workflow is passing non-empty values (typically from \${{ secrets.* }} and \${{ vars.* }} configured on the *calling* repository — secrets/vars don't propagate from the gh-actions repo)."
           exit 1
         fi
 
