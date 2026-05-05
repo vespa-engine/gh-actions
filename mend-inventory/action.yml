@@ -21,7 +21,8 @@ inputs:
     default: "https://api-saas-eu.mend.io"
   output-path:
     description: Path to write the inventory JSON to
-    required: true
+    required: false
+    default: "mend-inventory.json"
 
 runs:
   using: composite
@@ -68,63 +69,97 @@ runs:
           rm -f "$body_file"
         }
 
-        # 1. Log in -> JWT
-        login=$(api_call POST "${MEND_API_URL}/api/v2.0/login" \
+        # 1. Log in -> refreshToken (v3.0 auth is a two-step flow)
+        login_body=$(printf '{"email":"%s","userKey":"%s"}' "$MEND_EMAIL" "$MEND_USER_KEY")
+        login=$(api_call POST "${MEND_API_URL}/api/v3.0/login" \
           -H "Content-Type: application/json" \
-          -d "$(jq -n --arg email "$MEND_EMAIL" --arg key "$MEND_USER_KEY" \
-            '{email: $email, userKey: $key}')")
-        jwt=$(echo "$login" | jq -r '.retVal.jwtToken // empty')
-        if [[ -z "$jwt" ]]; then
-          echo "::error::Mend login returned no jwtToken"
+          -d "$login_body")
+        refresh_token=$(echo "$login" | jq -r '.response.refreshToken // empty')
+        if [[ -z "$refresh_token" ]]; then
+          echo "::error::Mend login returned no refreshToken"
           echo "$login" | jq '.' | head -50
+          exit 1
+        fi
+
+        # 2. Refresh -> JWT
+        jwt_resp=$(api_call POST "${MEND_API_URL}/api/v3.0/login/accessToken" \
+          -H "wss-refresh-token: ${refresh_token}" \
+          -H "Content-Type: application/json" \
+          -d '{}')
+        jwt=$(echo "$jwt_resp" | jq -r '.response.jwtToken // empty')
+        if [[ -z "$jwt" ]]; then
+          echo "::error::Mend refresh did not return jwtToken"
+          echo "$jwt_resp" | jq '.' | head -50
           exit 1
         fi
         echo "✅ Authenticated"
 
-        # 2. Fetch project library/license inventory (paginated GET)
+        # 3. Fetch project library/license inventory (paginated GET, cursor-based)
         mkdir -p "$(dirname "$OUTPUT")"
-        page=0
         PAGE_SIZE=1000
         accum=$(mktemp)
         echo '[]' > "$accum"
         total=0
-        while :; do
-          resp=$(api_call GET \
-            "${MEND_API_URL}/api/v2.0/projects/${PROJ_UUID}/libraries/licenses?page=${page}&pageSize=${PAGE_SIZE}" \
-            -H "Authorization: Bearer ${jwt}")
+        url="${MEND_API_URL}/api/v3.0/projects/${PROJ_UUID}/dependencies/libraries/licenses?pageSize=${PAGE_SIZE}"
+        page=0
+        while [[ -n "$url" ]]; do
+          resp=$(api_call GET "$url" -H "Authorization: Bearer ${jwt}")
 
-          # Append this page's retVal items to the accumulator.
+          # Append this page's response items to the accumulator.
           printf '%s' "$resp" \
-            | jq --slurpfile acc "$accum" '$acc[0] + (.retVal // [])' \
+            | jq --slurpfile acc "$accum" '$acc[0] + (.response // [])' \
             > "${accum}.tmp"
           mv "${accum}.tmp" "$accum"
 
           total=$(printf '%s' "$resp" | jq -r '.additionalData.totalItems // 0')
-          is_last=$(printf '%s' "$resp" | jq -r '.additionalData.isLastPage // true')
           got=$(jq 'length' "$accum")
-          echo "  page ${page}: ${got}/${total} (lastPage=${is_last})"
+          paging=$(printf '%s' "$resp" | jq -c '.additionalData.paging // null')
+          echo "  page ${page}: ${got}/${total} (paging=${paging})"
 
-          [[ "$is_last" == "true" ]] && break
+          # v3.0 cursor pagination — try common field names defensively. The `paging=...`
+          # log line above shows the actual response shape; if our guess is wrong, adjust
+          # the jq paths below.
+          next_url=$(printf '%s' "$resp" | jq -r '
+            .additionalData.paging.nextUrl //
+            .additionalData.paging.next //
+            empty
+          ')
+          next_cursor=$(printf '%s' "$resp" | jq -r '
+            .additionalData.paging.nextCursor //
+            .additionalData.paging.cursor //
+            empty
+          ')
+
+          if [[ -n "$next_url" && "$next_url" == http* ]]; then
+            url="$next_url"
+          elif [[ -n "$next_cursor" && "$next_cursor" != "null" ]]; then
+            url="${MEND_API_URL}/api/v3.0/projects/${PROJ_UUID}/dependencies/libraries/licenses?pageSize=${PAGE_SIZE}&cursor=${next_cursor}"
+          else
+            if (( got < total )); then
+              echo "::warning::Got ${got}/${total} items but no next-page cursor recognized in additionalData.paging — pagination logic may need adjusting"
+            fi
+            url=""
+          fi
+
           page=$((page + 1))
-          # safety stop: don't loop forever if the API misbehaves
           if (( page > 100 )); then
             echo "::error::Paginated past 100 pages — aborting"
             exit 1
           fi
         done
 
-        # Wrap accumulated array in the original response shape so downstream consumers
-        # see {retVal: [...], additionalData: {...}} just like a single-page response.
+        # Wrap accumulated array to match v3.0 single-page shape:
+        # { response: [...], additionalData: { totalItems: N } }
         jq --argjson total "$total" \
-          '{retVal: ., additionalData: {totalItems: $total, isLastPage: true}}' \
+          '{response: ., additionalData: {totalItems: $total}}' \
           "$accum" > "$OUTPUT"
         rm -f "$accum"
 
         size=$(wc -c < "$OUTPUT")
-        count=$(jq -r '.retVal | length' "$OUTPUT")
+        count=$(jq -r '.response | length' "$OUTPUT")
         echo "✅ Wrote ${OUTPUT} (${size} bytes, ${count} libraries)"
 
-        sample=$(jq '.retVal[0] // null' "$OUTPUT" | head -40)
+        sample=$(jq '.response[0] // null' "$OUTPUT" | head -40)
         cat >> "$GITHUB_STEP_SUMMARY" <<EOF
         ## 📦 Mend Inventory: $DISPLAY
 

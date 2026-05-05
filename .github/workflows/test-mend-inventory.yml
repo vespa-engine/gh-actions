@@ -2,15 +2,6 @@ name: "Test 'mend-inventory' Action"
 
 on:
   workflow_dispatch:
-    inputs:
-      mend-project-uuid:
-        description: "Mend Project UUID (from the Mend UI URL: ?project=<uuid>)"
-        required: true
-        default: "382cea30-cac2-457c-b074-c92aa5410e06"
-      mend-project-name:
-        description: "Display name (logs only)"
-        required: false
-        default: "console"
   pull_request:
     branches:
       - main
@@ -36,10 +27,8 @@ jobs:
           mend-project-name: 'test'
           mend-api-key: ${{ secrets.MEND_ATTRIBUTION_USER_KEY }}
           mend-user: ${{ secrets.MEND_ATTRIBUTION_USER_EMAIL }}
-          output-path: mend-inventory.json
 
       - name: Upload inventory artifact
-        if: ${{ always() }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: mend-inventory
