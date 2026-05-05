@@ -32,8 +32,8 @@ jobs:
       - name: Fetch Mend inventory
         uses: ./mend-inventory
         with:
-          mend-project-uuid: ${{ inputs.mend-project-uuid || '382cea30-cac2-457c-b074-c92aa5410e06' }}
-          mend-project-name: ${{ inputs.mend-project-name || 'console' }}
+          mend-project-uuid: ${{ var.MEND_PROJECT_UUID }}
+          mend-project-name: 'test'
           mend-api-key: ${{ secrets.MEND_USER_KEY }}
           mend-user: ${{ secrets.MEND_EMAIL }}
           output-path: mend-inventory.json
