@@ -8,7 +8,7 @@ Fetches the OS Inventory ("due diligence" library/license list) for a Mend proje
 - uses: vespa-engine/gh-actions/mend-inventory@main
   with:
     mend-project-uuid: "<uuid-from-mend-ui-url>"
-    mend-project-name: "console" # optional, logs only
+    mend-project-name: "<human-readable name>" # optional, used only in logs
     mend-api-key: ${{ secrets.MEND_USER_KEY }}
     mend-user: ${{ secrets.MEND_EMAIL }}
     output-path: mend-inventory.json
