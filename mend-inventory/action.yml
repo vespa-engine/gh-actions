@@ -42,6 +42,11 @@ runs:
         echo "  Project: ${DISPLAY}"
         echo "  Output:  ${OUTPUT}"
 
+        if [[ -z "${MEND_USER_KEY:-}" || -z "${MEND_EMAIL:-}" ]]; then
+          echo "::error::mend-api-key or mend-user is empty — confirm MEND_USER_KEY and MEND_EMAIL secrets are set on the calling repository."
+          exit 1
+        fi
+
         # Helper: curl that prints body + HTTP status on failure to STDERR (so errors reach
         # the Actions log even when stdout is captured by command substitution).
         api_call() {
@@ -76,27 +81,59 @@ runs:
         fi
         echo "✅ Authenticated"
 
-        # 2. Fetch project library/license inventory (synchronous GET)
+        # 2. Fetch project library/license inventory (paginated GET)
         mkdir -p "$(dirname "$OUTPUT")"
-        api_call GET \
-          "${MEND_API_URL}/api/v2.0/projects/${PROJ_UUID}/libraries/licenses" \
-          -H "Authorization: Bearer ${jwt}" \
-          > "$OUTPUT"
+        page=0
+        PAGE_SIZE=1000
+        accum=$(mktemp)
+        echo '[]' > "$accum"
+        total=0
+        while :; do
+          resp=$(api_call GET \
+            "${MEND_API_URL}/api/v2.0/projects/${PROJ_UUID}/libraries/licenses?page=${page}&pageSize=${PAGE_SIZE}" \
+            -H "Authorization: Bearer ${jwt}")
+
+          # Append this page's retVal items to the accumulator.
+          printf '%s' "$resp" \
+            | jq --slurpfile acc "$accum" '$acc[0] + (.retVal // [])' \
+            > "${accum}.tmp"
+          mv "${accum}.tmp" "$accum"
+
+          total=$(printf '%s' "$resp" | jq -r '.additionalData.totalItems // 0')
+          is_last=$(printf '%s' "$resp" | jq -r '.additionalData.isLastPage // true')
+          got=$(jq 'length' "$accum")
+          echo "  page ${page}: ${got}/${total} (lastPage=${is_last})"
+
+          [[ "$is_last" == "true" ]] && break
+          page=$((page + 1))
+          # safety stop: don't loop forever if the API misbehaves
+          if (( page > 100 )); then
+            echo "::error::Paginated past 100 pages — aborting"
+            exit 1
+          fi
+        done
+
+        # Wrap accumulated array in the original response shape so downstream consumers
+        # see {retVal: [...], additionalData: {...}} just like a single-page response.
+        jq --argjson total "$total" \
+          '{retVal: ., additionalData: {totalItems: $total, isLastPage: true}}' \
+          "$accum" > "$OUTPUT"
+        rm -f "$accum"
 
         size=$(wc -c < "$OUTPUT")
-        count=$(jq -r '
-          if (.retVal | type) == "array" then (.retVal | length)
-          elif (.retVal.libraries | type) == "array" then (.retVal.libraries | length)
-          else "?" end
-        ' "$OUTPUT" 2>/dev/null || echo "?")
+        count=$(jq -r '.retVal | length' "$OUTPUT")
         echo "✅ Wrote ${OUTPUT} (${size} bytes, ${count} libraries)"
 
-        {
-          printf '## 📦 Mend Inventory: %s\n\n' "$DISPLAY"
-          printf '- **Project UUID:** `%s`\n' "$PROJ_UUID"
-          printf '- **Libraries:** %s\n' "$count"
-          printf '- **Output:** `%s` (%s bytes)\n' "$OUTPUT" "$size"
-          printf '\n### First library (sample)\n```json\n'
-          jq '(.retVal[0] // .retVal.libraries[0] // .)' "$OUTPUT" 2>/dev/null | head -40
-          printf '\n```\n'
-        } >> "$GITHUB_STEP_SUMMARY"
+        sample=$(jq '.retVal[0] // null' "$OUTPUT" | head -40)
+        cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+        ## 📦 Mend Inventory: $DISPLAY
+
+        - **Project UUID:** \`$PROJ_UUID\`
+        - **Libraries:** $count
+        - **Output:** \`$OUTPUT\` ($size bytes)
+
+        ### First library (sample)
+        \`\`\`json
+        $sample
+        \`\`\`
+        EOF
