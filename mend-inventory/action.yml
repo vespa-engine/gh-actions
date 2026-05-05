@@ -10,10 +10,10 @@ inputs:
     required: false
     default: ""
   mend-api-key:
-    description: Mend User Key (pass from secrets.MEND_USER_KEY)
+    description: Mend User Key — pass from a repo secret on the calling workflow.
     required: true
   mend-user:
-    description: Mend User Email (pass from secrets.MEND_EMAIL)
+    description: Mend User Email — pass from a repo variable (or secret) on the calling workflow.
     required: true
   mend-api-url:
     description: Mend REST API base URL (separate host from the UI; defaults to EU)
@@ -44,7 +44,7 @@ runs:
         echo "  Output:  ${OUTPUT}"
 
         if [[ -z "${MEND_USER_KEY:-}" || -z "${MEND_EMAIL:-}" ]]; then
-          echo "::error::Action inputs 'mend-api-key' and/or 'mend-user' are empty. Check that the calling workflow is passing non-empty values (typically from \${{ secrets.* }} and \${{ vars.* }} configured on the *calling* repository — secrets/vars don't propagate from the gh-actions repo)."
+          echo "::error::Action inputs 'mend-api-key' and/or 'mend-user' are empty. The calling workflow must pass non-empty values for these inputs — typically from secrets/vars configured on the *calling* repository (they do not propagate from the gh-actions repo)."
           exit 1
         fi
 
