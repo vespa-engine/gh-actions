@@ -32,10 +32,10 @@ jobs:
       - name: Fetch Mend inventory
         uses: ./mend-inventory
         with:
-          mend-project-uuid: ${{ var.MEND_PROJECT_UUID }}
+          mend-project-uuid: ${{ vars.MEND_PROJECT_UUID }}
           mend-project-name: 'test'
-          mend-api-key: ${{ secrets.MEND_USER_KEY }}
-          mend-user: ${{ secrets.MEND_EMAIL }}
+          mend-api-key: ${{ secrets.MEND_ATTRIBUTION_USER_KEY }}
+          mend-user: ${{ secrets.MEND_ATTRIBUTION_USER_EMAIL }}
           output-path: mend-inventory.json
 
       - name: Upload inventory artifact
