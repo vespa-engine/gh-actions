@@ -9,8 +9,8 @@ Fetches the OS Inventory ("due diligence" library/license list) for a Mend proje
   with:
     mend-project-uuid: "<uuid-from-mend-ui-url>"
     mend-project-name: "<human-readable name>" # optional, used only in logs
-    mend-api-key: ${{ secrets.MEND_USER_KEY }}
-    mend-user: ${{ secrets.MEND_EMAIL }}
+    mend-api-key: ${{ secrets.MEND_ATTRIBUTION_USER_KEY }}
+    mend-user: ${{ vars.MEND_ATTRIBUTION_USER_EMAIL }}
     output-path: mend-inventory.json
 ```
 
