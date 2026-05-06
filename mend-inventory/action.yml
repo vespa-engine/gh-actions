@@ -136,7 +136,8 @@ runs:
             url="${MEND_API_URL}/api/v3.0/projects/${PROJ_UUID}/dependencies/libraries/licenses?pageSize=${PAGE_SIZE}&cursor=${next_cursor}"
           else
             if (( got < total )); then
-              echo "::warning::Got ${got}/${total} items but no next-page cursor recognized in additionalData.paging — pagination logic may need adjusting"
+              echo "::error::Got ${got}/${total} items but no next-page cursor recognized in additionalData.paging — pagination logic needs adjusting"
+              exit 1
             fi
             url=""
           fi
