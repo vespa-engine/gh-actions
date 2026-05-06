@@ -81,7 +81,7 @@ jobs:
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
-          ruby-version: 3.3
+          ruby-version: 4.0.3
 
       - name: Do not render with liquid
         if: ${{ inputs.add-no-render-with-liquid == 'true' }}
@@ -156,7 +156,7 @@ jobs:
             ${{ inputs.additional-args }} \
             _site
 
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.github-app-id }}
