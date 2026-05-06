@@ -94,13 +94,16 @@ runs:
         fi
         echo "✅ Authenticated"
 
-        # 3. Fetch project library/license inventory (paginated GET, cursor-based)
+        # 3. Fetch project library/license inventory (cursor-paginated GET).
+        # Per the v3.0 spec, list endpoints return additionalData.next as the
+        # full URL of the next page (with an embedded cursor query parameter)
+        # and additionalData.totalItems as the total count.
         mkdir -p "$(dirname "$OUTPUT")"
-        PAGE_SIZE=1000
+        LIMIT=1000
         accum=$(mktemp)
         echo '[]' > "$accum"
         total=0
-        url="${MEND_API_URL}/api/v3.0/projects/${PROJ_UUID}/dependencies/libraries/licenses?pageSize=${PAGE_SIZE}"
+        url="${MEND_API_URL}/api/v3.0/projects/${PROJ_UUID}/dependencies/libraries/licenses?limit=${LIMIT}"
         page=0
         while [[ -n "$url" ]]; do
           resp=$(api_call GET "$url" -H "Authorization: Bearer ${jwt}")
@@ -113,35 +116,9 @@ runs:
 
           total=$(printf '%s' "$resp" | jq -r '.additionalData.totalItems // 0')
           got=$(jq 'length' "$accum")
-          paging=$(printf '%s' "$resp" | jq -c '.additionalData.paging // null')
-          echo "  page ${page}: ${got}/${total} (paging=${paging})"
+          echo "  page ${page}: ${got}/${total}"
 
-          # v3.0 cursor pagination — try common field names defensively. The `paging=...`
-          # log line above shows the actual response shape; if our guess is wrong, adjust
-          # the jq paths below.
-          next_url=$(printf '%s' "$resp" | jq -r '
-            .additionalData.paging.nextUrl //
-            .additionalData.paging.next //
-            empty
-          ')
-          next_cursor=$(printf '%s' "$resp" | jq -r '
-            .additionalData.paging.nextCursor //
-            .additionalData.paging.cursor //
-            empty
-          ')
-
-          if [[ -n "$next_url" && "$next_url" == http* ]]; then
-            url="$next_url"
-          elif [[ -n "$next_cursor" && "$next_cursor" != "null" ]]; then
-            url="${MEND_API_URL}/api/v3.0/projects/${PROJ_UUID}/dependencies/libraries/licenses?pageSize=${PAGE_SIZE}&cursor=${next_cursor}"
-          else
-            if (( got < total )); then
-              echo "::error::Got ${got}/${total} items but no next-page cursor recognized in additionalData.paging — pagination logic needs adjusting"
-              exit 1
-            fi
-            url=""
-          fi
-
+          url=$(printf '%s' "$resp" | jq -r '.additionalData.next // empty')
           page=$((page + 1))
           if (( page > 100 )); then
             echo "::error::Paginated past 100 pages — aborting"
