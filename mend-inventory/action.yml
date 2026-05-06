@@ -1,5 +1,5 @@
 name: Fetch Mend Project Inventory
-description: Fetch the library/license inventory ("OS Inventory" / due-diligence report) for a project from Mend (v2 REST API)
+description: Fetch the library/license inventory ("OS Inventory" / due-diligence report) for a project from Mend (v3 REST API)
 
 inputs:
   mend-project-uuid:
