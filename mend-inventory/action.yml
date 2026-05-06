@@ -70,10 +70,10 @@ runs:
         }
 
         # 1. Log in -> refreshToken (v3.0 auth is a two-step flow)
-        login_body=$(printf '{"email":"%s","userKey":"%s"}' "$MEND_EMAIL" "$MEND_USER_KEY")
         login=$(api_call POST "${MEND_API_URL}/api/v3.0/login" \
           -H "Content-Type: application/json" \
-          -d "$login_body")
+          -d "$(jq -n --arg email "$MEND_EMAIL" --arg key "$MEND_USER_KEY" \
+            '{email: $email, userKey: $key}')")
         refresh_token=$(echo "$login" | jq -r '.response.refreshToken // empty')
         if [[ -z "$refresh_token" ]]; then
           echo "::error::Mend login returned no refreshToken"
