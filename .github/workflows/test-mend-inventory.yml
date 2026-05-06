@@ -34,4 +34,4 @@ jobs:
           name: mend-inventory
           path: mend-inventory.json
           retention-days: 14
-          if-no-files-found: warn
+          if-no-files-found: error
