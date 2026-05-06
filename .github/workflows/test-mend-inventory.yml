@@ -26,7 +26,7 @@ jobs:
           mend-project-uuid: ${{ vars.MEND_PROJECT_UUID }}
           mend-project-name: 'test'
           mend-api-key: ${{ secrets.MEND_ATTRIBUTION_USER_KEY }}
-          mend-user: ${{ secrets.MEND_ATTRIBUTION_USER_EMAIL }}
+          mend-user: ${{ vars.MEND_ATTRIBUTION_USER_EMAIL }}
 
       - name: Upload inventory artifact
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
