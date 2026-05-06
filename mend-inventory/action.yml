@@ -1,0 +1,152 @@
+name: Fetch Mend Project Inventory
+description: Fetch the library/license inventory ("OS Inventory" / due-diligence report) for a project from Mend (v3 REST API)
+
+inputs:
+  mend-project-uuid:
+    description: Mend Project UUID (visible in the Mend UI URL as ?project=<uuid>)
+    required: true
+  mend-project-name:
+    description: Display name (logs only — not used for lookup)
+    required: false
+    default: ""
+  mend-api-key:
+    description: Mend User Key — pass from a repo secret on the calling workflow.
+    required: true
+  mend-user:
+    description: Mend User Email — pass from a repo variable (or secret) on the calling workflow.
+    required: true
+  mend-api-url:
+    description: Mend REST API base URL (separate host from the UI; defaults to EU)
+    required: false
+    default: "https://api-saas-eu.mend.io"
+  output-path:
+    description: Path to write the inventory JSON to
+    required: false
+    default: "mend-inventory.json"
+
+runs:
+  using: composite
+  steps:
+    - name: Fetch Mend project inventory
+      shell: bash
+      env:
+        MEND_USER_KEY: ${{ inputs.mend-api-key }}
+        MEND_EMAIL: ${{ inputs.mend-user }}
+        MEND_API_URL: ${{ inputs.mend-api-url }}
+        PROJ_UUID: ${{ inputs.mend-project-uuid }}
+        PROJ_NAME: ${{ inputs.mend-project-name }}
+        OUTPUT: ${{ inputs.output-path }}
+      run: |
+        set -euo pipefail
+        DISPLAY="${PROJ_NAME:-$PROJ_UUID}"
+        echo "📦 Mend project inventory"
+        echo "  Project: ${DISPLAY}"
+        echo "  Output:  ${OUTPUT}"
+
+        if [[ -z "${MEND_USER_KEY:-}" || -z "${MEND_EMAIL:-}" ]]; then
+          echo "::error::Action inputs 'mend-api-key' and/or 'mend-user' are empty. The calling workflow must pass non-empty values for these inputs — typically from secrets/vars configured on the *calling* repository (they do not propagate from the gh-actions repo)."
+          exit 1
+        fi
+
+        # Helper: curl that prints body + HTTP status on failure to STDERR (so errors reach
+        # the Actions log even when stdout is captured by command substitution).
+        api_call() {
+          local method="$1" url="$2"; shift 2
+          local body_file status
+          body_file=$(mktemp)
+          status=$(curl -sS -o "$body_file" -w '%{http_code}' -X "$method" "$url" "$@" || echo "000")
+          if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
+            {
+              echo "::error::Mend API ${method} ${url} -> HTTP ${status}"
+              echo "Response body:"
+              cat "$body_file"
+              echo
+            } >&2
+            rm -f "$body_file"
+            return 1
+          fi
+          cat "$body_file"
+          rm -f "$body_file"
+        }
+
+        # 1. Log in -> refreshToken (v3.0 auth is a two-step flow)
+        login=$(api_call POST "${MEND_API_URL}/api/v3.0/login" \
+          -H "Content-Type: application/json" \
+          -d "$(jq -n --arg email "$MEND_EMAIL" --arg key "$MEND_USER_KEY" \
+            '{email: $email, userKey: $key}')")
+        refresh_token=$(echo "$login" | jq -r '.response.refreshToken // empty')
+        if [[ -z "$refresh_token" ]]; then
+          echo "::error::Mend login returned no refreshToken"
+          echo "$login" | jq '.' | head -50
+          exit 1
+        fi
+
+        # 2. Refresh -> JWT
+        jwt_resp=$(api_call POST "${MEND_API_URL}/api/v3.0/login/accessToken" \
+          -H "wss-refresh-token: ${refresh_token}" \
+          -H "Content-Type: application/json" \
+          -d '{}')
+        jwt=$(echo "$jwt_resp" | jq -r '.response.jwtToken // empty')
+        if [[ -z "$jwt" ]]; then
+          echo "::error::Mend refresh did not return jwtToken"
+          echo "$jwt_resp" | jq '.' | head -50
+          exit 1
+        fi
+        echo "✅ Authenticated"
+
+        # 3. Fetch project library/license inventory (cursor-paginated GET).
+        # Per the v3.0 spec, list endpoints return additionalData.next as the
+        # full URL of the next page (with an embedded cursor query parameter)
+        # and additionalData.totalItems as the total count.
+        mkdir -p "$(dirname "$OUTPUT")"
+        LIMIT=1000
+        accum=$(mktemp)
+        echo '[]' > "$accum"
+        total=0
+        url="${MEND_API_URL}/api/v3.0/projects/${PROJ_UUID}/dependencies/libraries/licenses?limit=${LIMIT}"
+        page=0
+        while [[ -n "$url" ]]; do
+          resp=$(api_call GET "$url" -H "Authorization: Bearer ${jwt}")
+
+          # Append this page's response items to the accumulator.
+          printf '%s' "$resp" \
+            | jq --slurpfile acc "$accum" '$acc[0] + (.response // [])' \
+            > "${accum}.tmp"
+          mv "${accum}.tmp" "$accum"
+
+          total=$(printf '%s' "$resp" | jq -r '.additionalData.totalItems // 0')
+          got=$(jq 'length' "$accum")
+          echo "  page ${page}: ${got}/${total}"
+
+          url=$(printf '%s' "$resp" | jq -r '.additionalData.next // empty')
+          page=$((page + 1))
+          if (( page > 100 )); then
+            echo "::error::Paginated past 100 pages — aborting"
+            exit 1
+          fi
+        done
+
+        # Wrap accumulated array to match v3.0 single-page shape:
+        # { response: [...], additionalData: { totalItems: N } }
+        jq --argjson total "$total" \
+          '{response: ., additionalData: {totalItems: $total}}' \
+          "$accum" > "$OUTPUT"
+        rm -f "$accum"
+
+        size=$(wc -c < "$OUTPUT")
+        count=$(jq -r '.response | length' "$OUTPUT")
+        echo "✅ Wrote ${OUTPUT} (${size} bytes, ${count} libraries)"
+
+        sample=$(jq '.response[0] // null' "$OUTPUT" | head -40)
+        cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+        ## 📦 Mend Inventory: $DISPLAY
+
+        - **Project UUID:** \`$PROJ_UUID\`
+        - **Libraries:** $count
+        - **Output:** \`$OUTPUT\` ($size bytes)
+
+        ### First library (sample)
+        \`\`\`json
+        $sample
+        \`\`\`
+        EOF

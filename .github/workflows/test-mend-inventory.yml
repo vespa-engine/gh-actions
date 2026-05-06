@@ -1,0 +1,37 @@
+name: "Test 'mend-inventory' Action"
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "mend-inventory/**"
+      - ".github/workflows/test-mend-inventory.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test 'mend-inventory' Action
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Fetch Mend inventory
+        uses: ./mend-inventory
+        with:
+          mend-project-uuid: ${{ vars.MEND_PROJECT_UUID }}
+          mend-project-name: 'test'
+          mend-api-key: ${{ secrets.MEND_ATTRIBUTION_USER_KEY }}
+          mend-user: ${{ vars.MEND_ATTRIBUTION_USER_EMAIL }}
+
+      - name: Upload inventory artifact
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
+        with:
+          name: mend-inventory
+          path: mend-inventory.json
+          retention-days: 14
+          if-no-files-found: error
