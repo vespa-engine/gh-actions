@@ -1,0 +1,58 @@
+name: "TF: Plan-only smoke test"
+#
+# Runs `tofu test` for a terraform/OpenTofu module using a mocked provider.
+# No credentials and no real infrastructure: catches plan-time regressions
+# (broken variable wiring, for_each/count errors, type mismatches, invalid
+# references) that `tofu validate` misses. The module supplies the test
+# files under tests/ (smoke.tftest.hcl and any fixtures).
+#
+# Usage:
+#   # On PRs:
+#   on:
+#     pull_request:
+#   jobs:
+#     smoke-test:
+#       uses: vespa-engine/gh-actions/.github/workflows/tf-smoke-test.yml@main
+#
+#   # As a release gate, alongside the tag-release caller:
+#   jobs:
+#     smoke-test:
+#       uses: vespa-engine/gh-actions/.github/workflows/tf-smoke-test.yml@main
+#     tag-release:
+#       needs: smoke-test
+#       uses: vespa-engine/gh-actions/.github/workflows/tf-tag-release.yml@main
+#       secrets: inherit
+#
+
+on:
+  workflow_call:
+
+defaults:
+  run:
+    # Specify to ensure "pipefail and errexit" are set.
+    # Ref: https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#defaultsrunshell
+    shell: bash
+
+jobs:
+  smoke-test:
+    name: Plan-only smoke test
+    runs-on: ubuntu-latest
+
+    # Least privilege: the job only checks out the repo and runs `tofu test`.
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up OpenTofu
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: latest
+
+      - name: Initialize
+        run: tofu init -backend=false
+
+      - name: Test
+        run: tofu test
