@@ -71,7 +71,7 @@ runs:
       run: |
         CLI_URL="https://downloads.mend.io/cli/linux_${ARCH}/mend"
         echo "📥 Downloading Mend CLI from ${CLI_URL}"
-        curl -fsSL "${CLI_URL}" -o /tmp/mend
+        curl --fail --silent --show-error -L "${CLI_URL}" -o /tmp/mend
         sudo mv /tmp/mend /usr/local/bin/mend
         sudo chmod +x /usr/local/bin/mend
         mend version

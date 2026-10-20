@@ -54,7 +54,7 @@ runs:
           local method="$1" url="$2"; shift 2
           local body_file status
           body_file=$(mktemp)
-          status=$(curl -sS -o "$body_file" -w '%{http_code}' -X "$method" "$url" "$@" || echo "000")
+          status=$(curl --silent --show-error -o "$body_file" -w '%{http_code}' -X "$method" "$url" "$@" || echo "000")
           if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
             {
               echo "::error::Mend API ${method} ${url} -> HTTP ${status}"
