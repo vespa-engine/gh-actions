@@ -38,7 +38,8 @@ jobs:
           for OWNERS_FILE in $(find . -name 'OWNERS' | sort -s --ignore-case --unique); do
             RELATIVE_PATH=$(dirname "$OWNERS_FILE")
             OWNERS=$(cat "$OWNERS_FILE" | xargs -n1 | sed 's/^/@/' | xargs)
-            CODEOWNERS_CONTENT+="$RELATIVE_PATH/* $OWNERS\n"
+            # Trailing "/" matches the directory recursively
+            CODEOWNERS_CONTENT+="$RELATIVE_PATH/ $OWNERS\n"
           done
 
           # Save the generated CODEOWNERS content
