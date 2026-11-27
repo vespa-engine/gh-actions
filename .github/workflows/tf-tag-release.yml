@@ -1,7 +1,10 @@
-name: "TF: Tag release from main.tf template_version"
+name: "TF: Tag release from the module version"
 #
-# Reads template_version from main.tf, creates a git tag and GitHub release
-# if the version is newer than the latest existing tag.
+# Reads the module version, creates a git tag and GitHub release if the
+# version is newer than the latest existing tag.
+#
+# The version is the template_version literal in main.tf, unless the
+# version-file input names a file that contains only the version.
 #
 # Usage:
 #   on:
@@ -17,9 +20,21 @@ name: "TF: Tag release from main.tf template_version"
 #       uses: vespa-engine/gh-actions/.github/workflows/tf-tag-release.yml@main
 #       secrets: inherit  # needed for secrets.GITHUB_TOKEN used by gh release create
 #
+# To read the version from a file instead of main.tf, add this to the job:
+#       with:
+#         version-file: VERSION
+#
 
 on:
   workflow_call:
+    inputs:
+      version-file:
+        description: >-
+          Path to a file that contains only the version (X.Y.Z). When empty,
+          the version is the template_version literal in main.tf.
+        type: string
+        required: false
+        default: ""
 
 defaults:
   run:
@@ -29,7 +44,7 @@ defaults:
 
 jobs:
   tag-release:
-    # Creates a vX.Y.Z tag from template_version in main.tf if it's newer than the latest existing tag
+    # Creates a vX.Y.Z tag from the version if it's newer than the latest existing tag
     name: Create release tag
     runs-on: ubuntu-latest
 
@@ -46,21 +61,35 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Extract template_version from main.tf
+      - name: Extract version
         id: version
+        env:
+          VERSION_FILE: ${{ inputs.version-file }}
         run: |
-          FILE=main.tf
-          if [ ! -f "$FILE" ]; then
-            echo "❌ $FILE not found" >&2
-            exit 1
+          if [ -n "$VERSION_FILE" ]; then
+            if [ ! -f "$VERSION_FILE" ]; then
+              echo "❌ $VERSION_FILE, named by the version-file input, not found" >&2
+              exit 1
+            fi
+            VERSION=$(<"$VERSION_FILE")
+            if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "❌ $VERSION_FILE must contain only a version of the form X.Y.Z, without other characters or CRLF line endings" >&2
+              exit 1
+            fi
+          else
+            FILE=main.tf
+            if [ ! -f "$FILE" ]; then
+              echo "❌ $FILE not found" >&2
+              exit 1
+            fi
+            VERSION=$(sed -nE 's/^[[:space:]]*template_version[[:space:]]*=[[:space:]]*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' "$FILE" | head -n1)
+            if [ -z "$VERSION" ]; then
+              echo "❌ Failed to parse template_version from main.tf" >&2
+              exit 1
+            fi
           fi
-          TEMPLATE_VERSION=$(sed -nE 's/^[[:space:]]*template_version[[:space:]]*=[[:space:]]*"([0-9]+\.[0-9]+\.[0-9]+)".*/\1/p' "$FILE" | head -n1)
-          if [ -z "$TEMPLATE_VERSION" ]; then
-            echo "❌ Failed to parse template_version from main.tf" >&2
-            exit 1
-          fi
-          echo "value=$TEMPLATE_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Parsed template_version: $TEMPLATE_VERSION"
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Parsed version: $VERSION"
 
       - name: Check if tag already exists and validate bump
         id: check
@@ -83,10 +112,10 @@ jobs:
           echo "🏷 Latest existing tag (no v): ${LATEST_TAG:-none}"
 
           if [ -n "$LATEST_TAG" ]; then
-            # Compare the template_version and latest tag (using sort -V for semantic versioning)
+            # Compare the version and latest tag (using sort -V for semantic versioning)
             HIGHEST=$(printf '%s\n%s\n' "$LATEST_TAG" "$VER" | sort -V | tail -n1)
             if [ "$HIGHEST" != "$VER" ]; then
-              echo "template_version ($VER) is not greater than the latest tag ($LATEST_TAG); skipping tag creation." >&2
+              echo "Version ($VER) is not greater than the latest tag ($LATEST_TAG); skipping tag creation." >&2
               echo "ℹ️ Version $VER not greater than latest tag ($LATEST_TAG) — skipping" >> "$GITHUB_STEP_SUMMARY"
               echo "create=no" >> "$GITHUB_OUTPUT"
               exit 0
